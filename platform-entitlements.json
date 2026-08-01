@@ -1,0 +1,11 @@
+{
+  "schema": "wisent.product-entitlements.current",
+  "product": "grant",
+  "organization_id": "WISENT_ORGANIZATION_ID",
+  "principal_id": "authenticated grant team member identity",
+  "community": ["grant.local"],
+  "managed": ["grant.organization", "grant.opportunity-intelligence"],
+  "managed_failure": "managed collaboration, intelligence, and review fail closed",
+  "community_failure": "the local grant workspace and evidence remain available",
+  "billing_unit": "active organization workspace"
+}

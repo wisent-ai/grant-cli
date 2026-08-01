@@ -2,6 +2,9 @@
 name = "grant-cli"
 version = "0.1.0"
 edition = "2024"
+description = "Local-first grant research, authoring, evidence, and export workspace"
+license-file = "LICENSE"
+repository = "https://github.com/wisent-ai/grant-cli"
 
 [dependencies]
 anyhow = "1.0.104"
