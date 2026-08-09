@@ -1,0 +1,15 @@
+[automation]
+managed = true
+source_fingerprint = "32dbda8dfb27d67d"
+category = "developer"
+
+[banner]
+title = "Research and write grants with evidence attached."
+description = "Local workspace for discovery, eligibility, source-backed applications, and submission export."
+product = "Wisent"
+url = "wisent.ai"
+theme = "dark"
+layout = "signal-left"
+art_seed = "grant-cli"
+width = 1584
+height = 396
