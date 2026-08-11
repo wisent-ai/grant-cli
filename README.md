@@ -10,9 +10,19 @@
 
 # Grant CLI
 
-**Grant CLI is a local-first workspace for discovering grant opportunities,
-checking eligibility, authoring source-backed applications, retaining evidence,
-and exporting a reviewable submission package.**
+Automated AI Harness for Grant Funding.
+
+You are leaving money on the table. The governments of the world want to support
+your project with non-dilutive funding. Money you could use to expand your team,
+do more research and overtake your competitors is stuck in a labyrinth of
+regulations, illegible interfaces and opaque rules. Our AI keeps track of all
+opportunities in the EU, USA, Australia and Singapore to identify opportunities
+for funding, extra partnerships and client outreach opportunities. Grant CLI
+keeps track of deadlines, drafts proposals based on published criteria and
+actually fills in the interfaces — all you have to do is sign off. All texts are
+humanised to bypass AI-detection scanners.
+
+Get more money for your business without diluting yourself.
 
 The local SQLite workspace remains usable without a hosted Wisent service.
 Managed collaboration and opportunity intelligence are separate, fail-closed
