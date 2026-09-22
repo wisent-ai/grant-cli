@@ -1,14 +1,17 @@
-mod application;
-mod authoring;
+//! Grant: the opportunities an organization can apply for, the applications
+//! written against them, and the store both live in.
+
+mod catalog;
 mod cli;
 mod db;
-mod delivery;
-mod document;
-mod knowledge;
 mod model;
-mod opportunity;
-mod organization;
-mod source;
+mod work;
+
+/// The module paths every caller already uses. The two families above group
+/// the modules by what they are; these keep `crate::source`, `crate::
+/// application` and the rest resolving exactly as they did.
+pub(crate) use catalog::{opportunity, organization, source};
+pub(crate) use work::{application, authoring, delivery, document, knowledge};
 
 use clap::Parser;
 
