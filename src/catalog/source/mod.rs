@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow};
 use quick_xml::de::from_str;
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_TYPE;
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use scraper::{Html, Selector};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -107,7 +107,7 @@ impl<'a> SourceService<'a> {
             last_synced_at: None,
         };
         self.db.connection.execute(
-            "INSERT INTO sources(id, name, kind, url, authority, enabled, config_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO sources(id, name, kind, url, authority, enabled, config_json, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             params![source.id, source.name, source.kind, source.url, source.authority, source.enabled, encode(&source.config)?, now()],
         )?;
         self.db
@@ -119,14 +119,14 @@ impl<'a> SourceService<'a> {
         let mut statement = self.db.connection.prepare(
             "SELECT id, name, kind, url, authority, enabled, config_json, last_synced_at FROM sources ORDER BY name",
         )?;
-        let rows = statement.query_map([], source_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        let rows = statement.query_map(params![], source_from_row)?;
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
     pub fn snapshots(&self, source: Option<&str>) -> Result<Vec<Value>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT s.id, s.source_id, r.name AS source_name, s.url, s.content_hash, s.media_type, s.object_path, s.metadata_json, s.retrieved_at FROM source_snapshots s JOIN sources r ON r.id = s.source_id WHERE (?1 IS NULL OR s.source_id = ?1 OR r.name = ?1) ORDER BY s.retrieved_at DESC",
+            "SELECT s.id, s.source_id, r.name AS source_name, s.url, s.content_hash, s.media_type, s.object_path, s.metadata_json, s.retrieved_at FROM source_snapshots s JOIN sources r ON r.id = s.source_id WHERE ($1::text IS NULL OR s.source_id = $1 OR r.name = $1) ORDER BY s.retrieved_at DESC",
         )?;
         let rows = statement.query_map([source], |row| {
             let metadata: String = row.get("metadata_json")?;
@@ -142,7 +142,7 @@ impl<'a> SourceService<'a> {
                 "retrieved_at": row.get::<_, String>("retrieved_at")?,
             }))
         })?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -182,7 +182,7 @@ impl<'a> SourceService<'a> {
         let mut installed = Vec::new();
         for (name, kind, url, authority) in catalog {
             let existing = self.db.connection.query_row(
-                "SELECT id, name, kind, url, authority, enabled, config_json, last_synced_at FROM sources WHERE name = ?1",
+                "SELECT id, name, kind, url, authority, enabled, config_json, last_synced_at FROM sources WHERE name = $1",
                 [name], source_from_row,
             ).optional()?;
             installed.push(match existing {

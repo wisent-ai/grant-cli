@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -28,7 +28,7 @@ impl<'a> OpportunityService<'a> {
                 self.db
                     .connection
                     .query_row(
-                        "SELECT id FROM sources WHERE id = ?1 OR name = ?1",
+                        "SELECT id FROM sources WHERE id = $1 OR name = $1",
                         [value],
                         |row| row.get::<_, String>("id"),
                     )
@@ -40,7 +40,7 @@ impl<'a> OpportunityService<'a> {
         let url = canonical_url(Url::parse(&input.url)?);
         self.upsert(resolved_source.as_deref(), input)?;
         self.db.connection.query_row(
-            "SELECT id, source_id, external_id, title, summary, url, status, opens_at, deadline_at, funding_min, funding_max, currency, funding_rate, regions_json, applicant_types_json, technologies_json, trl_min, trl_max, consortium_required, first_seen_at, last_seen_at, changed_at FROM opportunities WHERE url = ?1",
+            "SELECT id, source_id, external_id, title, summary, url, status, opens_at, deadline_at, funding_min, funding_max, currency, funding_rate, regions_json, applicant_types_json, technologies_json, trl_min, trl_max, consortium_required, first_seen_at, last_seen_at, changed_at FROM opportunities WHERE url = $1",
             [url], opportunity_from_row,
         ).map_err(Into::into)
     }
@@ -62,7 +62,7 @@ impl<'a> OpportunityService<'a> {
         let fingerprint = format!("{:x}", Sha256::digest(serde_json::to_vec(&normalized)?));
         let stored = json!({ "normalized": normalized, "raw": input.raw });
         let existing = self.db.connection.query_row(
-            "SELECT id, fingerprint, raw_json FROM opportunities WHERE url = ?1 OR (source_id = ?2 AND external_id = ?3 AND external_id IS NOT NULL)",
+            "SELECT id, fingerprint, raw_json FROM opportunities WHERE url = $1 OR (source_id = $2 AND external_id = $3 AND external_id IS NOT NULL)",
             params![canonical, source_id, input.external_id],
             |row| Ok((row.get::<_, String>("id")?, row.get::<_, String>("fingerprint")?, row.get::<_, String>("raw_json")?)),
         ).optional()?;
@@ -71,7 +71,7 @@ impl<'a> OpportunityService<'a> {
             None => {
                 let opportunity_id = prefixed_id("opp");
                 self.db.connection.execute(
-                    "INSERT INTO opportunities(id, source_id, external_id, title, summary, url, status, opens_at, deadline_at, funding_min, funding_max, currency, funding_rate, regions_json, applicant_types_json, technologies_json, trl_min, trl_max, consortium_required, fingerprint, raw_json, first_seen_at, last_seen_at, changed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?22, ?22)",
+                    "INSERT INTO opportunities(id, source_id, external_id, title, summary, url, status, opens_at, deadline_at, funding_min, funding_max, currency, funding_rate, regions_json, applicant_types_json, technologies_json, trl_min, trl_max, consortium_required, fingerprint, raw_json, first_seen_at, last_seen_at, changed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $22, $22)",
                     params![opportunity_id, source_id, input.external_id, input.title, input.summary, canonical, input.status.unwrap_or_else(|| "discovered".to_owned()), input.opens_at, input.deadline_at, input.funding_min, input.funding_max, input.currency, input.funding_rate, encode(&input.regions)?, encode(&input.applicant_types)?, encode(&input.technologies)?, input.trl_min, input.trl_max, input.consortium_required, fingerprint, encode(&stored)?, timestamp],
                 )?;
                 self.db
@@ -83,11 +83,11 @@ impl<'a> OpportunityService<'a> {
                 let changed_fields =
                     changed_fields(old.get("normalized"), stored.get("normalized"));
                 self.db.connection.execute(
-                    "UPDATE opportunities SET external_id = ?1, title = ?2, summary = ?3, url = ?4, status = ?5, opens_at = ?6, deadline_at = ?7, funding_min = ?8, funding_max = ?9, currency = ?10, funding_rate = ?11, regions_json = ?12, applicant_types_json = ?13, technologies_json = ?14, trl_min = ?15, trl_max = ?16, consortium_required = ?17, fingerprint = ?18, raw_json = ?19, last_seen_at = ?20, changed_at = ?20 WHERE id = ?21",
+                    "UPDATE opportunities SET external_id = $1, title = $2, summary = $3, url = $4, status = $5, opens_at = $6, deadline_at = $7, funding_min = $8, funding_max = $9, currency = $10, funding_rate = $11, regions_json = $12, applicant_types_json = $13, technologies_json = $14, trl_min = $15, trl_max = $16, consortium_required = $17, fingerprint = $18, raw_json = $19, last_seen_at = $20, changed_at = $20 WHERE id = $21",
                     params![input.external_id, input.title, input.summary, canonical, input.status.unwrap_or_else(|| "discovered".to_owned()), input.opens_at, input.deadline_at, input.funding_min, input.funding_max, input.currency, input.funding_rate, encode(&input.regions)?, encode(&input.applicant_types)?, encode(&input.technologies)?, input.trl_min, input.trl_max, input.consortium_required, fingerprint, encode(&stored)?, timestamp, opportunity_id],
                 )?;
                 self.db.connection.execute(
-                    "INSERT INTO opportunity_changes(id, opportunity_id, old_fingerprint, new_fingerprint, changed_fields_json, observed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    "INSERT INTO opportunity_changes(id, opportunity_id, old_fingerprint, new_fingerprint, changed_fields_json, observed_at) VALUES ($1, $2, $3, $4, $5, $6)",
                     params![prefixed_id("chg"), opportunity_id, old_fingerprint, fingerprint, encode(&changed_fields)?, timestamp],
                 )?;
                 self.db
@@ -96,7 +96,7 @@ impl<'a> OpportunityService<'a> {
             }
             Some((opportunity_id, _, _)) => {
                 self.db.connection.execute(
-                    "UPDATE opportunities SET last_seen_at = ?1 WHERE id = ?2",
+                    "UPDATE opportunities SET last_seen_at = $1 WHERE id = $2",
                     params![timestamp, opportunity_id],
                 )?;
                 Ok(Upsert::Unchanged)
@@ -117,7 +117,7 @@ impl<'a> OpportunityService<'a> {
         let region_needle = region.map(|value| format!("%\"{value}\"%"));
         let technology_needle = technology.map(|value| format!("%\"{value}\"%"));
         let mut statement = self.db.connection.prepare(
-            "SELECT o.id, o.source_id, o.external_id, o.title, o.summary, o.url, o.status, o.opens_at, o.deadline_at, o.funding_min, o.funding_max, o.currency, o.funding_rate, o.regions_json, o.applicant_types_json, o.technologies_json, o.trl_min, o.trl_max, o.consortium_required, o.first_seen_at, o.last_seen_at, o.changed_at FROM opportunities o LEFT JOIN watches w ON w.opportunity_id = o.id WHERE (?1 IS NULL OR o.title LIKE ?1 OR o.summary LIKE ?1) AND (?2 IS NULL OR o.status = ?2) AND (?3 IS NULL OR o.regions_json LIKE ?3) AND (?4 IS NULL OR o.technologies_json LIKE ?4) AND (?5 IS NULL OR o.deadline_at <= ?5) AND (?6 = 0 OR w.id IS NOT NULL) ORDER BY COALESCE(o.deadline_at, 'Z') ASC, o.changed_at DESC",
+            "SELECT o.id, o.source_id, o.external_id, o.title, o.summary, o.url, o.status, o.opens_at, o.deadline_at, o.funding_min, o.funding_max, o.currency, o.funding_rate, o.regions_json, o.applicant_types_json, o.technologies_json, o.trl_min, o.trl_max, o.consortium_required, o.first_seen_at, o.last_seen_at, o.changed_at FROM opportunities o LEFT JOIN watches w ON w.opportunity_id = o.id WHERE ($1::text IS NULL OR o.title ILIKE $1 OR o.summary ILIKE $1) AND ($2::text IS NULL OR o.status = $2) AND ($3::text IS NULL OR o.regions_json ILIKE $3) AND ($4::text IS NULL OR o.technologies_json ILIKE $4) AND ($5::text IS NULL OR o.deadline_at <= $5) AND (NOT $6::boolean OR w.id IS NOT NULL) ORDER BY COALESCE(o.deadline_at, 'Z') ASC, o.changed_at DESC",
         )?;
         let rows = statement.query_map(
             params![
@@ -130,14 +130,14 @@ impl<'a> OpportunityService<'a> {
             ],
             opportunity_from_row,
         )?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
     pub fn watch(&self, opportunity_id: &str, label: Option<&str>) -> Result<Value> {
         let resolved = self.resolve(opportunity_id)?;
         self.db.connection.execute(
-            "INSERT INTO watches(id, opportunity_id, label, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(opportunity_id) DO UPDATE SET label = excluded.label",
+            "INSERT INTO watches(id, opportunity_id, label, created_at) VALUES ($1, $2, $3, $4) ON CONFLICT(opportunity_id) DO UPDATE SET label = excluded.label",
             params![prefixed_id("watch"), resolved, label, now()],
         )?;
         self.db.activity(
@@ -152,7 +152,7 @@ impl<'a> OpportunityService<'a> {
     pub fn changes(&self, opportunity_id: &str) -> Result<Vec<OpportunityChange>> {
         let resolved = self.resolve(opportunity_id)?;
         let mut statement = self.db.connection.prepare(
-            "SELECT id, opportunity_id, changed_fields_json, observed_at FROM opportunity_changes WHERE opportunity_id = ?1 ORDER BY observed_at DESC",
+            "SELECT id, opportunity_id, changed_fields_json, observed_at FROM opportunity_changes WHERE opportunity_id = $1 ORDER BY observed_at DESC",
         )?;
         let rows = statement.query_map([resolved], |row| {
             let changed_fields: String = row.get("changed_fields_json")?;
@@ -163,7 +163,7 @@ impl<'a> OpportunityService<'a> {
                 observed_at: row.get("observed_at")?,
             })
         })?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -171,7 +171,7 @@ impl<'a> OpportunityService<'a> {
         self.db
             .connection
             .query_row(
-                "SELECT id FROM opportunities WHERE id = ?1 OR external_id = ?1 OR url = ?1",
+                "SELECT id FROM opportunities WHERE id = $1 OR external_id = $1 OR url = $1",
                 [value],
                 |row| row.get("id"),
             )
@@ -180,7 +180,7 @@ impl<'a> OpportunityService<'a> {
     }
 }
 
-fn opportunity_from_row(row: &Row<'_>) -> rusqlite::Result<Opportunity> {
+fn opportunity_from_row(row: &Row<'_>) -> crate::db::sql::Result<Opportunity> {
     let regions: String = row.get("regions_json")?;
     let applicant_types: String = row.get("applicant_types_json")?;
     let technologies: String = row.get("technologies_json")?;

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 
 use crate::db::{Database, encode, now, prefixed_id};

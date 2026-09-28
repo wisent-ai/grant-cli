@@ -1,11 +1,15 @@
+mod fleet;
+pub mod sql;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, params};
 use serde::Serialize;
 use serde_json::Value;
 use uuid::Uuid;
+
+use sql::{Connection, params};
 
 /// The schema is SQL, so it lives in SQL files: one file per family of
 /// tables, applied in this order because each family references the one
@@ -17,6 +21,8 @@ const SCHEMA: [&str; 4] = [
     include_str!("schema/delivery.sql"),
 ];
 
+/// The fleet database `grant-cli`, and the local directory that keeps the
+/// fetched source objects and exported packages.
 pub struct Database {
     pub connection: Connection,
     pub home: PathBuf,
@@ -32,9 +38,11 @@ impl Database {
         };
         fs::create_dir_all(root.join("objects"))?;
         fs::create_dir_all(root.join("exports"))?;
-        let connection = Connection::open(root.join("grant.db"))?;
+        let connection = Connection::new(fleet::connect()?);
         for family in SCHEMA {
-            connection.execute_batch(family)?;
+            connection
+                .execute_batch(family)
+                .context("creating grant-cli's tables in the fleet database failed")?;
         }
         Ok(Self {
             connection,
@@ -58,7 +66,7 @@ impl Database {
         data: &T,
     ) -> Result<()> {
         self.connection.execute(
-            "INSERT INTO activity(id, entity_type, entity_id, action, data_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO activity(id, entity_type, entity_id, action, data_json, created_at) VALUES ($1, $2, $3, $4, $5, $6)",
             params![prefixed_id("act"), entity_type, entity_id, action, serde_json::to_string(data)?, now()],
         )?;
         Ok(())

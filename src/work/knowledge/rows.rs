@@ -1,10 +1,10 @@
-//! Reading one SQLite row back as the thing it stands for, and the small
+//! Reading one database row back as the thing it stands for, and the small
 //! text rules a requirement and a slug are derived with.
 
 use std::fs;
 
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -58,7 +58,7 @@ pub(super) fn slugify(value: &str) -> String {
         .join("-")
 }
 
-pub(super) fn requirement_from_row(row: &Row<'_>) -> rusqlite::Result<Requirement> {
+pub(super) fn requirement_from_row(row: &Row<'_>) -> crate::db::sql::Result<Requirement> {
     let metadata: String = row.get("metadata_json")?;
     Ok(Requirement {
         id: row.get("id")?,
@@ -75,7 +75,7 @@ pub(super) fn requirement_from_row(row: &Row<'_>) -> rusqlite::Result<Requiremen
         created_at: row.get("created_at")?,
     })
 }
-pub(super) fn criterion_from_row(row: &Row<'_>) -> rusqlite::Result<Criterion> {
+pub(super) fn criterion_from_row(row: &Row<'_>) -> crate::db::sql::Result<Criterion> {
     Ok(Criterion {
         id: row.get("id")?,
         application_id: row.get("application_id")?,
@@ -89,7 +89,7 @@ pub(super) fn criterion_from_row(row: &Row<'_>) -> rusqlite::Result<Criterion> {
         created_at: row.get("created_at")?,
     })
 }
-pub(super) fn pattern_from_row(row: &Row<'_>) -> rusqlite::Result<Pattern> {
+pub(super) fn pattern_from_row(row: &Row<'_>) -> crate::db::sql::Result<Pattern> {
     let scope: String = row.get("scope_json")?;
     let structure: String = row.get("structure_json")?;
     let required_inputs: String = row.get("required_inputs_json")?;
@@ -113,7 +113,7 @@ pub(super) fn pattern_from_row(row: &Row<'_>) -> rusqlite::Result<Pattern> {
         created_at: row.get("created_at")?,
     })
 }
-pub(super) fn comment_from_row(row: &Row<'_>) -> rusqlite::Result<Comment> {
+pub(super) fn comment_from_row(row: &Row<'_>) -> crate::db::sql::Result<Comment> {
     let actions: String = row.get("suggested_actions_json")?;
     Ok(Comment {
         id: row.get("id")?,

@@ -5,7 +5,7 @@
 use std::fs;
 
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -49,21 +49,21 @@ impl<'a> KnowledgeService<'a> {
             created_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO patterns(id, slug, name, category, authority, status, scope_json, structure_json, rationale, required_inputs_json, anti_patterns_json, source_refs_json, confidence, reviewed_at, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) ON CONFLICT(slug) DO UPDATE SET category = excluded.category, authority = excluded.authority, status = excluded.status, scope_json = excluded.scope_json, structure_json = excluded.structure_json, rationale = excluded.rationale, required_inputs_json = excluded.required_inputs_json, anti_patterns_json = excluded.anti_patterns_json, source_refs_json = excluded.source_refs_json, confidence = excluded.confidence, reviewed_at = excluded.reviewed_at",
+            "INSERT INTO patterns(id, slug, name, category, authority, status, scope_json, structure_json, rationale, required_inputs_json, anti_patterns_json, source_refs_json, confidence, reviewed_at, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) ON CONFLICT(slug) DO UPDATE SET category = excluded.category, authority = excluded.authority, status = excluded.status, scope_json = excluded.scope_json, structure_json = excluded.structure_json, rationale = excluded.rationale, required_inputs_json = excluded.required_inputs_json, anti_patterns_json = excluded.anti_patterns_json, source_refs_json = excluded.source_refs_json, confidence = excluded.confidence, reviewed_at = excluded.reviewed_at",
             params![pattern.id, pattern.slug, pattern.name, pattern.category, pattern.authority, pattern.status, encode(&pattern.scope)?, encode(&pattern.structure)?, pattern.rationale, encode(&pattern.required_inputs)?, encode(&pattern.anti_patterns)?, encode(&pattern.source_refs)?, pattern.confidence, pattern.reviewed_at, pattern.created_at],
         )?;
         self.db.connection.query_row(
-            "SELECT id, slug, name, category, authority, status, scope_json, structure_json, rationale, required_inputs_json, anti_patterns_json, source_refs_json, confidence, reviewed_at, created_at FROM patterns WHERE slug = ?1",
+            "SELECT id, slug, name, category, authority, status, scope_json, structure_json, rationale, required_inputs_json, anti_patterns_json, source_refs_json, confidence, reviewed_at, created_at FROM patterns WHERE slug = $1",
             [pattern.slug], pattern_from_row,
         ).map_err(Into::into)
     }
 
     pub fn pattern_list(&self, category: Option<&str>) -> Result<Vec<Pattern>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT id, slug, name, category, authority, status, scope_json, structure_json, rationale, required_inputs_json, anti_patterns_json, source_refs_json, confidence, reviewed_at, created_at FROM patterns WHERE (?1 IS NULL OR category = ?1) ORDER BY category, name",
+            "SELECT id, slug, name, category, authority, status, scope_json, structure_json, rationale, required_inputs_json, anti_patterns_json, source_refs_json, confidence, reviewed_at, created_at FROM patterns WHERE ($1::text IS NULL OR category = $1) ORDER BY category, name",
         )?;
         let rows = statement.query_map([category], pattern_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -172,7 +172,7 @@ impl<'a> KnowledgeService<'a> {
                 self.db
                     .connection
                     .query_row(
-                        "SELECT id FROM patterns WHERE id = ?1 OR slug = ?1",
+                        "SELECT id FROM patterns WHERE id = $1 OR slug = $1",
                         [value],
                         |row| row.get::<_, String>("id"),
                     )
@@ -183,7 +183,7 @@ impl<'a> KnowledgeService<'a> {
         };
         let example_id = prefixed_id("example");
         self.db.connection.execute(
-            "INSERT INTO examples(id, pattern_id, application_id, field_code, outcome, text, evaluator_comment, explanation, source_ref, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO examples(id, pattern_id, application_id, field_code, outcome, text, evaluator_comment, explanation, source_ref, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
             params![example_id, pattern_id, application_id, field_code, outcome, text, evaluator_comment, explanation, source_ref, now()],
         )?;
         Ok(json!({ "id": example_id, "pattern_id": pattern_id, "outcome": outcome }))
@@ -191,7 +191,7 @@ impl<'a> KnowledgeService<'a> {
 
     pub fn example_list(&self, pattern: Option<&str>, outcome: Option<&str>) -> Result<Vec<Value>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT e.id, e.pattern_id, p.slug AS pattern_slug, e.application_id, e.field_code, e.outcome, e.text, e.evaluator_comment, e.explanation, e.source_ref, e.created_at FROM examples e LEFT JOIN patterns p ON p.id = e.pattern_id WHERE (?1 IS NULL OR e.pattern_id = ?1 OR p.slug = ?1) AND (?2 IS NULL OR e.outcome = ?2) ORDER BY e.created_at DESC",
+            "SELECT e.id, e.pattern_id, p.slug AS pattern_slug, e.application_id, e.field_code, e.outcome, e.text, e.evaluator_comment, e.explanation, e.source_ref, e.created_at FROM examples e LEFT JOIN patterns p ON p.id = e.pattern_id WHERE ($1::text IS NULL OR e.pattern_id = $1 OR p.slug = $1) AND ($2::text IS NULL OR e.outcome = $2) ORDER BY e.created_at DESC",
         )?;
         let rows = statement.query_map(params![pattern, outcome], |row| {
             Ok(json!({
@@ -208,7 +208,7 @@ impl<'a> KnowledgeService<'a> {
                 "created_at": row.get::<_, String>("created_at")?,
             }))
         })?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 }

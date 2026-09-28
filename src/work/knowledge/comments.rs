@@ -4,7 +4,7 @@
 use std::fs;
 
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -45,7 +45,7 @@ impl<'a> KnowledgeService<'a> {
             resolved_at: None,
         };
         self.db.connection.execute(
-            "INSERT INTO comments(id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO comments(id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
             params![comment.id, comment.application_id, comment.field_id, comment.comment_type, comment.severity, comment.body, comment.basis_kind, comment.basis_ref, encode(&comment.suggested_actions)?, comment.status, comment.owner, comment.created_at],
         )?;
         self.db
@@ -55,19 +55,19 @@ impl<'a> KnowledgeService<'a> {
 
     pub fn comment_list(&self, application_id: &str, status: Option<&str>) -> Result<Vec<Comment>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, resolution, created_at, resolved_at FROM comments WHERE application_id = ?1 AND (?2 IS NULL OR status = ?2) ORDER BY CASE severity WHEN 'blocker' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END, created_at",
+            "SELECT id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, resolution, created_at, resolved_at FROM comments WHERE application_id = $1 AND ($2::text IS NULL OR status = $2) ORDER BY CASE severity WHEN 'blocker' THEN 0 WHEN 'error' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END, created_at",
         )?;
         let rows = statement.query_map(params![application_id, status], comment_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
     pub fn comment_resolve(&self, comment_id: &str, resolution: &str) -> Result<Comment> {
         self.db.connection.execute(
-            "UPDATE comments SET status = 'resolved', resolution = ?1, resolved_at = ?2 WHERE id = ?3", params![resolution, now(), comment_id],
+            "UPDATE comments SET status = 'resolved', resolution = $1, resolved_at = $2 WHERE id = $3", params![resolution, now(), comment_id],
         )?;
         self.db.connection.query_row(
-            "SELECT id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, resolution, created_at, resolved_at FROM comments WHERE id = ?1",
+            "SELECT id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, resolution, created_at, resolved_at FROM comments WHERE id = $1",
             [comment_id], comment_from_row,
         ).optional()?.context("comment not found")
     }

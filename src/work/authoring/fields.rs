@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 
 use crate::db::{Database, encode, now, prefixed_id};
@@ -44,25 +44,25 @@ impl<'a> AuthoringService<'a> {
             updated_at: timestamp,
         };
         self.db.connection.execute(
-            "INSERT INTO application_fields(id, application_id, code, title, instruction, char_limit, metadata_json, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(application_id, code) DO UPDATE SET title = excluded.title, instruction = excluded.instruction, char_limit = excluded.char_limit, metadata_json = excluded.metadata_json, updated_at = excluded.updated_at",
-            params![field.id, field.application_id, field.code, field.title, field.instruction, field.char_limit, encode(&field.metadata)?, field.updated_at],
+            "INSERT INTO application_fields(id, application_id, code, title, instruction, char_limit, metadata_json, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(application_id, code) DO UPDATE SET title = excluded.title, instruction = excluded.instruction, char_limit = excluded.char_limit, metadata_json = excluded.metadata_json, updated_at = excluded.updated_at",
+            params![field.id, field.application_id, field.code, field.title, field.instruction, field.char_limit.map(i64::try_from).transpose()?, encode(&field.metadata)?, field.updated_at],
         )?;
         self.field_get(application_id, code)
     }
 
     pub fn field_get(&self, application_id: &str, code: &str) -> Result<ApplicationField> {
         self.db.connection.query_row(
-            "SELECT id, application_id, code, title, instruction, char_limit, value, status, metadata_json, updated_at FROM application_fields WHERE application_id = ?1 AND (code = ?2 OR id = ?2)",
+            "SELECT id, application_id, code, title, instruction, char_limit, value, status, metadata_json, updated_at FROM application_fields WHERE application_id = $1 AND (code = $2 OR id = $2)",
             params![application_id, code], field_from_row,
         ).optional()?.context("application field not found")
     }
 
     pub fn field_list(&self, application_id: &str) -> Result<Vec<ApplicationField>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT id, application_id, code, title, instruction, char_limit, value, status, metadata_json, updated_at FROM application_fields WHERE application_id = ?1 ORDER BY code",
+            "SELECT id, application_id, code, title, instruction, char_limit, value, status, metadata_json, updated_at FROM application_fields WHERE application_id = $1 ORDER BY code",
         )?;
         let rows = statement.query_map([application_id], field_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -78,7 +78,7 @@ impl<'a> AuthoringService<'a> {
         }
         let field = self.field_get(application_id, code)?;
         self.db.connection.execute(
-            "UPDATE application_fields SET value = ?1, status = ?2, updated_at = ?3 WHERE id = ?4",
+            "UPDATE application_fields SET value = $1, status = $2, updated_at = $3 WHERE id = $4",
             params![value, status, now(), field.id],
         )?;
         self.db.activity(
@@ -98,7 +98,7 @@ impl<'a> AuthoringService<'a> {
     ) -> Result<Value> {
         let field = self.field_get(application_id, code)?;
         self.db.connection.execute(
-            "INSERT OR IGNORE INTO field_requirements(field_id, requirement_id) VALUES (?1, ?2)",
+            "INSERT INTO field_requirements(field_id, requirement_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             params![field.id, requirement_id],
         )?;
         Ok(json!({ "field_id": field.id, "requirement_id": requirement_id }))
@@ -112,7 +112,7 @@ impl<'a> AuthoringService<'a> {
     ) -> Result<Value> {
         let field = self.field_get(application_id, code)?;
         self.db.connection.execute(
-            "INSERT OR IGNORE INTO field_criteria(field_id, criterion_id) VALUES (?1, ?2)",
+            "INSERT INTO field_criteria(field_id, criterion_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
             params![field.id, criterion_id],
         )?;
         Ok(json!({ "field_id": field.id, "criterion_id": criterion_id }))
@@ -128,7 +128,7 @@ impl<'a> AuthoringService<'a> {
             created_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO field_claims(id, field_id, claim, status, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO field_claims(id, field_id, claim, status, created_at) VALUES ($1, $2, $3, $4, $5)",
             params![claim.id, claim.field_id, claim.claim, claim.status, claim.created_at],
         )?;
         Ok(claim)
@@ -136,7 +136,7 @@ impl<'a> AuthoringService<'a> {
 
     pub fn claim_list(&self, application_id: &str, code: Option<&str>) -> Result<Vec<Claim>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT c.id, c.field_id, c.claim, c.status, c.created_at FROM field_claims c JOIN application_fields f ON f.id = c.field_id WHERE f.application_id = ?1 AND (?2 IS NULL OR f.code = ?2 OR f.id = ?2) ORDER BY c.created_at",
+            "SELECT c.id, c.field_id, c.claim, c.status, c.created_at FROM field_claims c JOIN application_fields f ON f.id = c.field_id WHERE f.application_id = $1 AND ($2::text IS NULL OR f.code = $2 OR f.id = $2) ORDER BY c.created_at",
         )?;
         let rows = statement.query_map(params![application_id, code], |row| {
             Ok(Claim {
@@ -147,7 +147,7 @@ impl<'a> AuthoringService<'a> {
                 created_at: row.get("created_at")?,
             })
         })?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -164,11 +164,11 @@ impl<'a> AuthoringService<'a> {
         }
         let link_id = prefixed_id("link");
         self.db.connection.execute(
-            "INSERT INTO evidence_links(id, claim_id, organization_evidence_id, document_id, citation, note, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO evidence_links(id, claim_id, organization_evidence_id, document_id, citation, note, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
             params![link_id, claim_id, organization_evidence_id, document_id, citation, note, now()],
         )?;
         self.db.connection.execute(
-            "UPDATE field_claims SET status = 'supported' WHERE id = ?1",
+            "UPDATE field_claims SET status = 'supported' WHERE id = $1",
             [claim_id],
         )?;
         Ok(
@@ -213,12 +213,12 @@ impl<'a> AuthoringService<'a> {
                 }
             }
             let unmapped_requirements: i64 = self.db.connection.query_row(
-                "SELECT COUNT(*) AS value FROM field_requirements WHERE field_id = ?1",
+                "SELECT COUNT(*) AS value FROM field_requirements WHERE field_id = $1",
                 [&field.id],
                 |row| row.get("value"),
             )?;
             let unmapped_criteria: i64 = self.db.connection.query_row(
-                "SELECT COUNT(*) AS value FROM field_criteria WHERE field_id = ?1",
+                "SELECT COUNT(*) AS value FROM field_criteria WHERE field_id = $1",
                 [&field.id],
                 |row| row.get("value"),
             )?;
@@ -252,9 +252,9 @@ impl<'a> AuthoringService<'a> {
             }
         }
         let unsupported = self.db.connection.prepare(
-            "SELECT c.id, c.field_id, c.claim FROM field_claims c JOIN application_fields f ON f.id = c.field_id WHERE f.application_id = ?1 AND c.status != 'supported'",
+            "SELECT c.id, c.field_id, c.claim FROM field_claims c JOIN application_fields f ON f.id = c.field_id WHERE f.application_id = $1 AND c.status != 'supported'",
         )?.query_map([application_id], |row| Ok((row.get::<_, String>("id")?, row.get::<_, String>("field_id")?, row.get::<_, String>("claim")?)))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
         for (claim_id, field_id, claim) in unsupported {
             findings.push(finding(
                 "unsupported-claim",
@@ -266,9 +266,9 @@ impl<'a> AuthoringService<'a> {
             ));
         }
         let open_comments = self.db.connection.prepare(
-            "SELECT id, field_id, severity, body FROM comments WHERE application_id = ?1 AND status = 'open'",
+            "SELECT id, field_id, severity, body FROM comments WHERE application_id = $1 AND status = 'open'",
         )?.query_map([application_id], |row| Ok((row.get::<_, String>("id")?, row.get::<_, Option<String>>("field_id")?, row.get::<_, String>("severity")?, row.get::<_, String>("body")?)))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
         for (comment_id, field_id, severity, body) in open_comments {
             findings.push(finding(
                 "open-comment",

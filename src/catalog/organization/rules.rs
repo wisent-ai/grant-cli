@@ -3,14 +3,14 @@
 //! evidence make, and the comparison each clause performs.
 
 use anyhow::{Context, Result, anyhow};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Map, Value, json};
 
 use crate::db::{Database, encode, now, prefixed_id};
 use crate::model::{EligibilityFinding, EligibilityRule, Evidence, FitAssessment, Organization};
 
 
-pub(super) fn organization_from_row(row: &Row<'_>) -> rusqlite::Result<Organization> {
+pub(super) fn organization_from_row(row: &Row<'_>) -> crate::db::sql::Result<Organization> {
     let profile: String = row.get("profile_json")?;
     Ok(Organization {
         id: row.get("id")?,
@@ -22,7 +22,7 @@ pub(super) fn organization_from_row(row: &Row<'_>) -> rusqlite::Result<Organizat
     })
 }
 
-pub(super) fn evidence_from_row(row: &Row<'_>) -> rusqlite::Result<Evidence> {
+pub(super) fn evidence_from_row(row: &Row<'_>) -> crate::db::sql::Result<Evidence> {
     let value: String = row.get("value_json")?;
     Ok(Evidence {
         id: row.get("id")?,
@@ -38,7 +38,7 @@ pub(super) fn evidence_from_row(row: &Row<'_>) -> rusqlite::Result<Evidence> {
     })
 }
 
-pub(super) fn rule_from_row(row: &Row<'_>) -> rusqlite::Result<EligibilityRule> {
+pub(super) fn rule_from_row(row: &Row<'_>) -> crate::db::sql::Result<EligibilityRule> {
     let expression: String = row.get("expression_json")?;
     Ok(EligibilityRule {
         id: row.get("id")?,

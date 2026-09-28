@@ -6,7 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use regex::Regex;
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_TYPE;
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use scraper::Html;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -92,7 +92,7 @@ impl<'a> DocumentService<'a> {
             fs::write(&text_path, text.as_bytes())?;
         }
         let existing = self.db.connection.query_row(
-            "SELECT id, application_id, opportunity_id, organization_id, kind, authority, title, source_uri, version_label, effective_at, content_hash, media_type, object_path, text_path, metadata_json, created_at FROM documents WHERE content_hash = ?1 AND kind = ?2 AND COALESCE(application_id, '') = COALESCE(?3, '') AND COALESCE(opportunity_id, '') = COALESCE(?4, '') AND COALESCE(organization_id, '') = COALESCE(?5, '')",
+            "SELECT id, application_id, opportunity_id, organization_id, kind, authority, title, source_uri, version_label, effective_at, content_hash, media_type, object_path, text_path, metadata_json, created_at FROM documents WHERE content_hash = $1 AND kind = $2 AND COALESCE(application_id, '') = COALESCE($3::text, '') AND COALESCE(opportunity_id, '') = COALESCE($4::text, '') AND COALESCE(organization_id, '') = COALESCE($5::text, '')",
             params![digest, options.kind, options.application_id, options.opportunity_id, options.organization_id], document_from_row,
         ).optional()?;
         if let Some(document) = existing {
@@ -117,7 +117,7 @@ impl<'a> DocumentService<'a> {
             created_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO documents(id, application_id, opportunity_id, organization_id, kind, authority, title, source_uri, version_label, effective_at, content_hash, media_type, object_path, text_path, metadata_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO documents(id, application_id, opportunity_id, organization_id, kind, authority, title, source_uri, version_label, effective_at, content_hash, media_type, object_path, text_path, metadata_json, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
             params![document.id, document.application_id, document.opportunity_id, document.organization_id, document.kind, document.authority, document.title, document.source_uri, document.version_label, document.effective_at, document.content_hash, document.media_type, document.object_path, document.text_path, encode(&document.metadata)?, document.created_at],
         )?;
         self.db
@@ -131,10 +131,10 @@ impl<'a> DocumentService<'a> {
         authority: Option<&str>,
     ) -> Result<Vec<Document>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT id, application_id, opportunity_id, organization_id, kind, authority, title, source_uri, version_label, effective_at, content_hash, media_type, object_path, text_path, metadata_json, created_at FROM documents WHERE (?1 IS NULL OR application_id = ?1) AND (?2 IS NULL OR authority = ?2) ORDER BY created_at DESC",
+            "SELECT id, application_id, opportunity_id, organization_id, kind, authority, title, source_uri, version_label, effective_at, content_hash, media_type, object_path, text_path, metadata_json, created_at FROM documents WHERE ($1::text IS NULL OR application_id = $1) AND ($2::text IS NULL OR authority = $2) ORDER BY created_at DESC",
         )?;
         let rows = statement.query_map(params![application_id, authority], document_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -143,7 +143,7 @@ impl<'a> DocumentService<'a> {
             .db
             .connection
             .query_row(
-                "SELECT text_path FROM documents WHERE id = ?1",
+                "SELECT text_path FROM documents WHERE id = $1",
                 [document_id],
                 |row| row.get("text_path"),
             )
@@ -198,7 +198,7 @@ fn extract_text(bytes: &[u8], media_type: Option<&str>, source: &str) -> Result<
     Ok(raw.into_owned())
 }
 
-fn document_from_row(row: &Row<'_>) -> rusqlite::Result<Document> {
+fn document_from_row(row: &Row<'_>) -> crate::db::sql::Result<Document> {
     let metadata: String = row.get("metadata_json")?;
     Ok(Document {
         id: row.get("id")?,

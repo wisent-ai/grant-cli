@@ -104,6 +104,7 @@ pub(super) fn organization_command(db: &Database, command: OrganizationCommand) 
             profile,
         } => value(service.upsert(&slug, &name, json_arg(Some(&profile))?)?),
         OrganizationCommand::Show { organization } => value(service.get(&organization)?),
+        OrganizationCommand::Delete { organization } => value(service.delete(&organization)?),
         OrganizationCommand::EvidenceAdd {
             organization,
             kind,

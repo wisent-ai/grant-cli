@@ -113,6 +113,10 @@ pub enum OrganizationCommand {
     Show {
         organization: String,
     },
+    /// Remove an organization and its evidence; refused while an application names it.
+    Delete {
+        organization: String,
+    },
     EvidenceAdd {
         organization: String,
         #[arg(long)]

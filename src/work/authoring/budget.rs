@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 
 use crate::db::{Database, encode, now, prefixed_id};
@@ -27,11 +27,11 @@ impl<'a> AuthoringService<'a> {
     ) -> Result<Value> {
         let budget_id = prefixed_id("budget");
         self.db.connection.execute(
-            "INSERT INTO budgets(id, application_id, currency, indirect_method, indirect_rate, private_financing_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7) ON CONFLICT(application_id) DO UPDATE SET currency = excluded.currency, indirect_method = excluded.indirect_method, indirect_rate = excluded.indirect_rate, private_financing_json = excluded.private_financing_json, updated_at = excluded.updated_at",
+            "INSERT INTO budgets(id, application_id, currency, indirect_method, indirect_rate, private_financing_json, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $7) ON CONFLICT(application_id) DO UPDATE SET currency = excluded.currency, indirect_method = excluded.indirect_method, indirect_rate = excluded.indirect_rate, private_financing_json = excluded.private_financing_json, updated_at = excluded.updated_at",
             params![budget_id, application_id, currency, indirect_method, indirect_rate, encode(&private_financing)?, now()],
         )?;
         let resolved: String = self.db.connection.query_row(
-            "SELECT id FROM budgets WHERE application_id = ?1",
+            "SELECT id FROM budgets WHERE application_id = $1",
             [application_id],
             |row| row.get("id"),
         )?;
@@ -61,7 +61,7 @@ impl<'a> AuthoringService<'a> {
             .db
             .connection
             .query_row(
-                "SELECT id FROM budgets WHERE application_id = ?1",
+                "SELECT id FROM budgets WHERE application_id = $1",
                 [application_id],
                 |row| row.get("id"),
             )
@@ -87,7 +87,7 @@ impl<'a> AuthoringService<'a> {
             created_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO budget_lines(id, budget_id, task_code, category, research_type, description, quantity, unit, unit_cost, eligible_cost, aid_rate, requested_funding, source_ref, metadata_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT INTO budget_lines(id, budget_id, task_code, category, research_type, description, quantity, unit, unit_cost, eligible_cost, aid_rate, requested_funding, source_ref, metadata_json, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
             params![line.id, line.budget_id, line.task_code, line.category, line.research_type, line.description, line.quantity, line.unit, line.unit_cost, line.eligible_cost, line.aid_rate, line.requested_funding, line.source_ref, encode(&line.metadata)?, line.created_at],
         )?;
         Ok(line)
@@ -95,16 +95,16 @@ impl<'a> AuthoringService<'a> {
 
     pub fn budget_check(&self, application_id: &str) -> Result<Vec<Finding>> {
         let budget = self.db.connection.query_row(
-            "SELECT id, indirect_method, indirect_rate, private_financing_json FROM budgets WHERE application_id = ?1", [application_id],
+            "SELECT id, indirect_method, indirect_rate, private_financing_json FROM budgets WHERE application_id = $1", [application_id],
             |row| Ok((row.get::<_, String>("id")?, row.get::<_, Option<String>>("indirect_method")?, row.get::<_, Option<f64>>("indirect_rate")?, row.get::<_, String>("private_financing_json")?)),
         ).optional()?.context("budget not initialized")?;
         let (budget_id, indirect_method, indirect_rate, private_json) = budget;
         let mut statement = self.db.connection.prepare(
-            "SELECT id, budget_id, task_code, category, research_type, description, quantity, unit, unit_cost, eligible_cost, aid_rate, requested_funding, source_ref, metadata_json, created_at FROM budget_lines WHERE budget_id = ?1 ORDER BY category, task_code",
+            "SELECT id, budget_id, task_code, category, research_type, description, quantity, unit, unit_cost, eligible_cost, aid_rate, requested_funding, source_ref, metadata_json, created_at FROM budget_lines WHERE budget_id = $1 ORDER BY category, task_code",
         )?;
         let lines = statement
             .query_map([budget_id], budget_line_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
         let mut findings = Vec::new();
         for line in &lines {
             if line.eligible_cost.is_sign_negative() {

@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow};
 use quick_xml::de::from_str;
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_TYPE;
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use scraper::{Html, Selector};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -25,7 +25,7 @@ use super::{SourceService, SyncReport};
 impl<'a> SourceService<'a> {
     pub fn sync(&self, source_id: &str) -> Result<SyncReport> {
         let source = self.db.connection.query_row(
-            "SELECT id, name, kind, url, authority, enabled, config_json, last_synced_at FROM sources WHERE id = ?1 OR name = ?1",
+            "SELECT id, name, kind, url, authority, enabled, config_json, last_synced_at FROM sources WHERE id = $1 OR name = $1",
             [source_id], source_from_row,
         ).optional()?.context("source not found")?;
         if !source.enabled {
@@ -45,12 +45,12 @@ impl<'a> SourceService<'a> {
         }
         let retrieved_at = now();
         let snapshot_id = self.db.connection.query_row(
-            "SELECT id FROM source_snapshots WHERE source_id = ?1 AND url = ?2 AND content_hash = ?3",
+            "SELECT id FROM source_snapshots WHERE source_id = $1 AND url = $2 AND content_hash = $3",
             params![source.id, source.url, digest], |row| row.get::<_, String>("id"),
         ).optional()?.unwrap_or_else(|| prefixed_id("snap"));
         self.db.connection.execute(
-            "INSERT OR IGNORE INTO source_snapshots(id, source_id, url, content_hash, media_type, object_path, metadata_json, retrieved_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, '{}', ?7)",
-            params![snapshot_id, source.id, source.url, digest, media_type, object_path.to_string_lossy(), retrieved_at],
+            "INSERT INTO source_snapshots(id, source_id, url, content_hash, media_type, object_path, metadata_json, retrieved_at) VALUES ($1, $2, $3, $4, $5, $6, '{}', $7) ON CONFLICT DO NOTHING",
+            params![snapshot_id, source.id, source.url, digest, media_type, object_path.to_string_lossy().into_owned(), retrieved_at],
         )?;
         let body = String::from_utf8_lossy(&bytes);
         let inputs = self.parse(&source, &body)?;
@@ -71,7 +71,7 @@ impl<'a> SourceService<'a> {
             }
         }
         self.db.connection.execute(
-            "UPDATE sources SET last_synced_at = ?1 WHERE id = ?2",
+            "UPDATE sources SET last_synced_at = $1 WHERE id = $2",
             params![now(), source.id],
         )?;
         self.db.activity("source", &source.id, "synced", &report)?;

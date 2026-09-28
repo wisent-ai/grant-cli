@@ -1,6 +1,3 @@
-PRAGMA foreign_keys = ON;
-PRAGMA journal_mode = WAL;
-
 CREATE TABLE IF NOT EXISTS metadata (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -11,7 +8,7 @@ CREATE TABLE IF NOT EXISTS sources (
     kind TEXT NOT NULL,
     url TEXT NOT NULL,
     authority TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
     config_json TEXT NOT NULL DEFAULT '{}',
     last_synced_at TEXT,
     created_at TEXT NOT NULL
@@ -37,16 +34,16 @@ CREATE TABLE IF NOT EXISTS opportunities (
     status TEXT NOT NULL DEFAULT 'discovered',
     opens_at TEXT,
     deadline_at TEXT,
-    funding_min REAL,
-    funding_max REAL,
+    funding_min DOUBLE PRECISION,
+    funding_max DOUBLE PRECISION,
     currency TEXT,
-    funding_rate REAL,
+    funding_rate DOUBLE PRECISION,
     regions_json TEXT NOT NULL DEFAULT '[]',
     applicant_types_json TEXT NOT NULL DEFAULT '[]',
     technologies_json TEXT NOT NULL DEFAULT '[]',
-    trl_min REAL,
-    trl_max REAL,
-    consortium_required INTEGER,
+    trl_min DOUBLE PRECISION,
+    trl_max DOUBLE PRECISION,
+    consortium_required BOOLEAN,
     fingerprint TEXT NOT NULL,
     raw_json TEXT NOT NULL DEFAULT '{}',
     first_seen_at TEXT NOT NULL,
@@ -95,7 +92,7 @@ CREATE TABLE IF NOT EXISTS eligibility_rules (
     opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     expression_json TEXT NOT NULL,
-    hard_gate INTEGER NOT NULL DEFAULT 1,
+    hard_gate BOOLEAN NOT NULL DEFAULT TRUE,
     source_snapshot_id TEXT REFERENCES source_snapshots(id) ON DELETE SET NULL,
     citation TEXT,
     created_at TEXT NOT NULL
@@ -105,7 +102,7 @@ CREATE TABLE IF NOT EXISTS fit_assessments (
     opportunity_id TEXT NOT NULL REFERENCES opportunities(id) ON DELETE CASCADE,
     organization_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     eligibility TEXT NOT NULL,
-    score REAL,
+    score DOUBLE PRECISION,
     dimensions_json TEXT NOT NULL,
     findings_json TEXT NOT NULL,
     assessed_at TEXT NOT NULL,

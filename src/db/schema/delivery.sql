@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS budgets (
     application_id TEXT NOT NULL UNIQUE REFERENCES applications(id) ON DELETE CASCADE,
     currency TEXT NOT NULL,
     indirect_method TEXT,
-    indirect_rate REAL,
+    indirect_rate DOUBLE PRECISION,
     private_financing_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -15,12 +15,12 @@ CREATE TABLE IF NOT EXISTS budget_lines (
     category TEXT NOT NULL,
     research_type TEXT,
     description TEXT NOT NULL,
-    quantity REAL,
+    quantity DOUBLE PRECISION,
     unit TEXT,
-    unit_cost REAL,
-    eligible_cost REAL NOT NULL,
-    aid_rate REAL,
-    requested_funding REAL,
+    unit_cost DOUBLE PRECISION,
+    eligible_cost DOUBLE PRECISION NOT NULL,
+    aid_rate DOUBLE PRECISION,
+    requested_funding DOUBLE PRECISION,
     source_ref TEXT,
     metadata_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS outcomes (
     application_id TEXT NOT NULL UNIQUE REFERENCES applications(id) ON DELETE CASCADE,
     result TEXT NOT NULL,
     decided_at TEXT,
-    awarded_amount REAL,
-    score REAL,
+    awarded_amount DOUBLE PRECISION,
+    score DOUBLE PRECISION,
     feedback_document_id TEXT REFERENCES documents(id) ON DELETE SET NULL,
     notes TEXT,
     created_at TEXT NOT NULL
@@ -63,4 +63,4 @@ CREATE TABLE IF NOT EXISTS activity (
     data_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
 );
-INSERT OR REPLACE INTO metadata(key, value) VALUES ('schema', 'initial');
+INSERT INTO metadata(key, value) VALUES ('schema', 'initial') ON CONFLICT(key) DO UPDATE SET value = excluded.value;

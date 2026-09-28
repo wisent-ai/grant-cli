@@ -5,7 +5,7 @@
 use std::fs;
 
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -43,7 +43,7 @@ impl<'a> KnowledgeService<'a> {
                 created_at: now(),
             };
             self.db.connection.execute(
-                "INSERT INTO requirements(id, application_id, document_id, authority, kind, code, title, text, citation, mandatory, metadata_json, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                "INSERT INTO requirements(id, application_id, document_id, authority, kind, code, title, text, citation, mandatory, metadata_json, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
                 params![requirement.id, requirement.application_id, requirement.document_id, requirement.authority, requirement.kind, requirement.code, requirement.title, requirement.text, requirement.citation, requirement.mandatory, encode(&requirement.metadata)?, requirement.created_at],
             )?;
             requirements.push(requirement);
@@ -78,7 +78,7 @@ impl<'a> KnowledgeService<'a> {
                 created_at: now(),
             };
             self.db.connection.execute(
-                "INSERT INTO criteria(id, application_id, document_id, code, title, text, gate, weight, citation, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO criteria(id, application_id, document_id, code, title, text, gate, weight, citation, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
                 params![criterion.id, criterion.application_id, criterion.document_id, criterion.code, criterion.title, criterion.text, criterion.gate, criterion.weight, criterion.citation, criterion.created_at],
             )?;
             criteria.push(criterion);
@@ -98,7 +98,7 @@ impl<'a> KnowledgeService<'a> {
         document_id: &str,
     ) -> Result<GuideExtraction> {
         let (authority, text_path): (String, String) = self.db.connection.query_row(
-            "SELECT authority, text_path FROM documents WHERE id = ?1 AND (application_id = ?2 OR application_id IS NULL)",
+            "SELECT authority, text_path FROM documents WHERE id = $1 AND (application_id = $2 OR application_id IS NULL)",
             params![document_id, application_id], |row| Ok((row.get("authority")?, row.get("text_path")?)),
         ).optional()?.context("document not found for application")?;
         let text = fs::read_to_string(text_path)?;
@@ -145,19 +145,19 @@ impl<'a> KnowledgeService<'a> {
 
     pub fn requirements(&self, application_id: &str) -> Result<Vec<Requirement>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT id, application_id, document_id, authority, kind, code, title, text, citation, mandatory, metadata_json, created_at FROM requirements WHERE application_id = ?1 ORDER BY authority, kind, code, title",
+            "SELECT id, application_id, document_id, authority, kind, code, title, text, citation, mandatory, metadata_json, created_at FROM requirements WHERE application_id = $1 ORDER BY authority, kind, code, title",
         )?;
         let rows = statement.query_map([application_id], requirement_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
     pub fn criteria(&self, application_id: &str) -> Result<Vec<Criterion>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT id, application_id, document_id, code, title, text, gate, weight, citation, created_at FROM criteria WHERE application_id = ?1 ORDER BY gate DESC, code, title",
+            "SELECT id, application_id, document_id, code, title, text, gate, weight, citation, created_at FROM criteria WHERE application_id = $1 ORDER BY gate DESC, code, title",
         )?;
         let rows = statement.query_map([application_id], criterion_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 }

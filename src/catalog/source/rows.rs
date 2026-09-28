@@ -8,7 +8,7 @@ use anyhow::{Context, Result, anyhow};
 use quick_xml::de::from_str;
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_TYPE;
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use scraper::{Html, Selector};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -20,7 +20,7 @@ use crate::model::{OpportunityInput, Source};
 use crate::opportunity::{OpportunityService, Upsert};
 
 
-pub(super) fn source_from_row(row: &Row<'_>) -> rusqlite::Result<Source> {
+pub(super) fn source_from_row(row: &Row<'_>) -> crate::db::sql::Result<Source> {
     let config: String = row.get("config_json")?;
     Ok(Source {
         id: row.get("id")?,

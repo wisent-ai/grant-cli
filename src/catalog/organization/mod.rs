@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Map, Value, json};
 
 use crate::db::{Database, encode, now, prefixed_id};
@@ -24,14 +24,14 @@ impl<'a> OrganizationService<'a> {
             .db
             .connection
             .query_row(
-                "SELECT id FROM organizations WHERE slug = ?1",
+                "SELECT id FROM organizations WHERE slug = $1",
                 [slug],
                 |row| row.get("id"),
             )
             .optional()?;
         let organization_id = existing.unwrap_or_else(|| prefixed_id("org"));
         self.db.connection.execute(
-            "INSERT INTO organizations(id, slug, name, profile_json, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?5) ON CONFLICT(slug) DO UPDATE SET name = excluded.name, profile_json = excluded.profile_json, updated_at = excluded.updated_at",
+            "INSERT INTO organizations(id, slug, name, profile_json, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $5) ON CONFLICT(slug) DO UPDATE SET name = excluded.name, profile_json = excluded.profile_json, updated_at = excluded.updated_at",
             params![organization_id, slug, name, encode(&profile)?, timestamp],
         )?;
         let organization = self.get(slug)?;
@@ -46,9 +46,27 @@ impl<'a> OrganizationService<'a> {
 
     pub fn get(&self, value: &str) -> Result<Organization> {
         self.db.connection.query_row(
-            "SELECT id, slug, name, profile_json, created_at, updated_at FROM organizations WHERE id = ?1 OR slug = ?1",
+            "SELECT id, slug, name, profile_json, created_at, updated_at FROM organizations WHERE id = $1 OR slug = $1",
             [value], organization_from_row,
         ).optional()?.context("organization not found")
+    }
+
+    /// Removes an organization and its evidence; the database refuses while
+    /// an application still names it.
+    pub fn delete(&self, value: &str) -> Result<Organization> {
+        let organization = self.get(value)?;
+        self.db
+            .connection
+            .execute("DELETE FROM organizations WHERE id = $1", [&organization.id])
+            .with_context(|| {
+                format!(
+                    "deleting organization {} failed; one that an application names cannot be deleted",
+                    organization.slug
+                )
+            })?;
+        self.db
+            .activity("organization", &organization.id, "deleted", &organization)?;
+        Ok(organization)
     }
 
     pub fn evidence_add(
@@ -76,7 +94,7 @@ impl<'a> OrganizationService<'a> {
             created_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO organization_evidence(id, organization_id, kind, title, value_json, source, valid_from, valid_until, confidence, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT INTO organization_evidence(id, organization_id, kind, title, value_json, source, valid_from, valid_until, confidence, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
             params![evidence.id, evidence.organization_id, evidence.kind, evidence.title, encode(&evidence.value)?, evidence.source, evidence.valid_from, evidence.valid_until, evidence.confidence, evidence.created_at],
         )?;
         self.db.activity(
@@ -91,10 +109,10 @@ impl<'a> OrganizationService<'a> {
     pub fn evidence_list(&self, organization: &str) -> Result<Vec<Evidence>> {
         let organization_id = self.get(organization)?.id;
         let mut statement = self.db.connection.prepare(
-            "SELECT id, organization_id, kind, title, value_json, source, valid_from, valid_until, confidence, created_at FROM organization_evidence WHERE organization_id = ?1 ORDER BY created_at DESC",
+            "SELECT id, organization_id, kind, title, value_json, source, valid_from, valid_until, confidence, created_at FROM organization_evidence WHERE organization_id = $1 ORDER BY created_at DESC",
         )?;
         let rows = statement.query_map([organization_id], evidence_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -115,7 +133,7 @@ impl<'a> OrganizationService<'a> {
             citation: citation.map(str::to_owned),
         };
         self.db.connection.execute(
-            "INSERT INTO eligibility_rules(id, opportunity_id, name, expression_json, hard_gate, citation, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO eligibility_rules(id, opportunity_id, name, expression_json, hard_gate, citation, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)",
             params![rule.id, rule.opportunity_id, rule.name, encode(&rule.expression)?, rule.hard_gate, rule.citation, now()],
         )?;
         self.db.activity(
@@ -132,11 +150,11 @@ impl<'a> OrganizationService<'a> {
         let evidence = self.evidence_list(&organization.id)?;
         let context = build_context(&organization.profile, &evidence);
         let mut statement = self.db.connection.prepare(
-            "SELECT id, opportunity_id, name, expression_json, hard_gate, citation FROM eligibility_rules WHERE opportunity_id = ?1 ORDER BY hard_gate DESC, name",
+            "SELECT id, opportunity_id, name, expression_json, hard_gate, citation FROM eligibility_rules WHERE opportunity_id = $1 ORDER BY hard_gate DESC, name",
         )?;
         let rules = statement
             .query_map([opportunity_id], rule_from_row)?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
         let mut findings = Vec::new();
         for rule in rules {
             let (passed, reason) = evaluate_expression(&rule.expression, &context)?;
@@ -187,7 +205,7 @@ impl<'a> OrganizationService<'a> {
             assessed_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO fit_assessments(id, opportunity_id, organization_id, eligibility, score, dimensions_json, findings_json, assessed_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT(opportunity_id, organization_id) DO UPDATE SET id = excluded.id, eligibility = excluded.eligibility, score = excluded.score, dimensions_json = excluded.dimensions_json, findings_json = excluded.findings_json, assessed_at = excluded.assessed_at",
+            "INSERT INTO fit_assessments(id, opportunity_id, organization_id, eligibility, score, dimensions_json, findings_json, assessed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT(opportunity_id, organization_id) DO UPDATE SET id = excluded.id, eligibility = excluded.eligibility, score = excluded.score, dimensions_json = excluded.dimensions_json, findings_json = excluded.findings_json, assessed_at = excluded.assessed_at",
             params![assessment.id, assessment.opportunity_id, assessment.organization_id, assessment.eligibility, assessment.score, encode(&assessment.dimensions)?, encode(&assessment.findings)?, assessment.assessed_at],
         )?;
         self.db

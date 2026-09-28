@@ -1,7 +1,7 @@
 use std::fs;
 
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde::Deserialize;
 use serde_json::{Value, json};
 

@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use anyhow::{Context, Result, anyhow};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 
 use crate::db::{Database, encode, now, prefixed_id};
@@ -21,7 +21,7 @@ impl<'a> AuthoringService<'a> {
     pub fn review(&self, application_id: &str) -> Result<ReviewReport> {
         let mut findings = self.lint(application_id)?;
         if self.db.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM budgets WHERE application_id = ?1) AS value",
+            "SELECT EXISTS(SELECT 1 FROM budgets WHERE application_id = $1) AS value",
             [application_id],
             |row| row.get::<_, bool>("value"),
         )? {
@@ -37,7 +37,7 @@ impl<'a> AuthoringService<'a> {
             ));
         }
         let hard_fit: Option<String> = self.db.connection.query_row(
-            "SELECT eligibility FROM fit_assessments f JOIN applications a ON a.opportunity_id = f.opportunity_id AND a.organization_id = f.organization_id WHERE a.id = ?1 ORDER BY assessed_at DESC LIMIT 1",
+            "SELECT eligibility FROM fit_assessments f JOIN applications a ON a.opportunity_id = f.opportunity_id AND a.organization_id = f.organization_id WHERE a.id = $1 ORDER BY assessed_at DESC LIMIT 1",
             [application_id], |row| row.get("eligibility"),
         ).optional()?;
         match hard_fit.as_deref() {
@@ -75,12 +75,12 @@ impl<'a> AuthoringService<'a> {
             created_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO reviews(id, application_id, kind, status, summary_json, created_at) VALUES (?1, ?2, 'full', ?3, ?4, ?5)",
+            "INSERT INTO reviews(id, application_id, kind, status, summary_json, created_at) VALUES ($1, $2, 'full', $3, $4, $5)",
             params![report.id, report.application_id, report.status, encode(&json!({ "findings": report.findings.len() }))?, report.created_at],
         )?;
         for entry in &report.findings {
             self.db.connection.execute(
-                "INSERT INTO review_findings(id, review_id, field_id, type, severity, message, basis_ref, suggested_action, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO review_findings(id, review_id, field_id, type, severity, message, basis_ref, suggested_action, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
                 params![prefixed_id("finding"), report.id, entry.field_id, entry.finding_type, entry.severity, entry.message, entry.basis_ref, entry.suggested_action, now()],
             )?;
         }
@@ -92,43 +92,43 @@ impl<'a> AuthoringService<'a> {
     pub fn export(&self, application_id: &str, output: Option<&str>) -> Result<Value> {
         let application = row_json(
             &self.db.connection,
-            "SELECT * FROM applications WHERE id = ?1",
+            "SELECT * FROM applications WHERE id = $1",
             application_id,
         )?
         .context("application not found")?;
         let fields = rows_json(
             &self.db.connection,
-            "SELECT * FROM application_fields WHERE application_id = ?1 ORDER BY code",
+            "SELECT * FROM application_fields WHERE application_id = $1 ORDER BY code",
             application_id,
         )?;
         let requirements = rows_json(
             &self.db.connection,
-            "SELECT * FROM requirements WHERE application_id = ?1 ORDER BY authority, kind, code",
+            "SELECT * FROM requirements WHERE application_id = $1 ORDER BY authority, kind, code",
             application_id,
         )?;
         let criteria = rows_json(
             &self.db.connection,
-            "SELECT * FROM criteria WHERE application_id = ?1 ORDER BY gate DESC, code",
+            "SELECT * FROM criteria WHERE application_id = $1 ORDER BY gate DESC, code",
             application_id,
         )?;
         let comments = rows_json(
             &self.db.connection,
-            "SELECT * FROM comments WHERE application_id = ?1 ORDER BY created_at",
+            "SELECT * FROM comments WHERE application_id = $1 ORDER BY created_at",
             application_id,
         )?;
         let tasks = rows_json(
             &self.db.connection,
-            "SELECT * FROM application_tasks WHERE application_id = ?1 ORDER BY due_at",
+            "SELECT * FROM application_tasks WHERE application_id = $1 ORDER BY due_at",
             application_id,
         )?;
         let budget = row_json(
             &self.db.connection,
-            "SELECT * FROM budgets WHERE application_id = ?1",
+            "SELECT * FROM budgets WHERE application_id = $1",
             application_id,
         )?;
         let budget_lines = rows_json(
             &self.db.connection,
-            "SELECT l.* FROM budget_lines l JOIN budgets b ON b.id = l.budget_id WHERE b.application_id = ?1 ORDER BY l.category, l.task_code",
+            "SELECT l.* FROM budget_lines l JOIN budgets b ON b.id = l.budget_id WHERE b.application_id = $1 ORDER BY l.category, l.task_code",
             application_id,
         )?;
         let package = json!({

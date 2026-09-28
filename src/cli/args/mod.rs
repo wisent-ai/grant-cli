@@ -30,7 +30,7 @@ pub use work::*;
 #[command(
     name = "grant",
     version,
-    about = "Local-first grant discovery, qualification, authoring and tracking"
+    about = "Grant discovery, qualification, authoring and tracking on the Wisent fleet database"
 )]
 pub struct Cli {
     #[arg(long, global = true, env = "GRANT_HOME")]

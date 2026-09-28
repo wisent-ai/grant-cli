@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS requirements (
     title TEXT NOT NULL,
     text TEXT NOT NULL,
     citation TEXT,
-    mandatory INTEGER NOT NULL DEFAULT 1,
+    mandatory BOOLEAN NOT NULL DEFAULT TRUE,
     metadata_json TEXT NOT NULL DEFAULT '{}',
     created_at TEXT NOT NULL
 );
@@ -62,8 +62,8 @@ CREATE TABLE IF NOT EXISTS criteria (
     code TEXT,
     title TEXT NOT NULL,
     text TEXT NOT NULL,
-    gate INTEGER NOT NULL DEFAULT 0,
-    weight REAL,
+    gate BOOLEAN NOT NULL DEFAULT FALSE,
+    weight DOUBLE PRECISION,
     citation TEXT,
     created_at TEXT NOT NULL
 );
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS application_fields (
     code TEXT NOT NULL,
     title TEXT NOT NULL,
     instruction TEXT,
-    char_limit INTEGER,
+    char_limit BIGINT,
     value TEXT,
     status TEXT NOT NULL DEFAULT 'empty',
     metadata_json TEXT NOT NULL DEFAULT '{}',

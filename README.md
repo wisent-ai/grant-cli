@@ -24,9 +24,10 @@ humanised to bypass AI-detection scanners.
 
 Get more money for your business without diluting yourself.
 
-The local SQLite workspace remains usable without a hosted Wisent service.
-Managed collaboration and opportunity intelligence are separate, fail-closed
-capabilities.
+Grant data lives in the Wisent fleet database `grant-cli`, which Stado
+provisions and names; every machine in the fleet reads and writes the same
+record. Managed collaboration and opportunity intelligence are separate,
+fail-closed capabilities.
 
 [Quick start](#quick-start) · [Command surface](#primary-interfaces) ·
 [Canonical repository](https://github.com/wisent-ai/grant-cli)
@@ -55,7 +56,8 @@ Grant CLI serves:
 
 ### Included
 
-- a local SQLite system of record under an explicit `GRANT_HOME`;
+- the fleet database `grant-cli` as the system of record, and fetched source
+  objects and exports in the directory `GRANT_HOME` names;
 - source cataloguing and retrieval;
 - opportunity discovery, search, qualification, and deadline records;
 - organization profiles and eligibility checks;
@@ -75,16 +77,16 @@ Grant CLI serves:
 - It does not make scraped or model-generated text authoritative; official
   sources and applicant-approved facts remain required.
 - It does not invent organization facts, citations, budget values, or evidence.
-- The local product does not require a paid organization entitlement.
-- Managed-service failure must not block access to the local workspace and its
+- The CLI does not require a paid organization entitlement.
+- Managed-service failure must not block access to the workspace record and its
   evidence.
 
 ### Supported environment and current capability
 
 | Surface | Requirement | Current state |
 |---|---|---|
-| Local CLI and workspace | Rust build supported by `Cargo.lock` | Implemented |
-| Local SQLite state | writable `GRANT_HOME` | Implemented |
+| CLI | Rust build supported by `Cargo.lock` | Implemented |
+| Fleet database state | Stado with `grant-cli` declared, and the `grant-cli-database-client` bearer | Implemented |
 | Source and document ingestion | supported HTTP/PDF/XML/ZIP inputs | Implemented |
 | JSON automation | `--json` | Implemented |
 | Managed organization collaboration | platform entitlement | Contract declared; hosted availability separate |
@@ -138,7 +140,7 @@ Grant CLI serves:
 official sources + organization facts
                  │
                  ▼
-       local SQLite evidence workspace
+     fleet database `grant-cli` (evidence record)
                  │
    ┌─────────────┼──────────────┐
    ▼             ▼              ▼
@@ -152,34 +154,56 @@ opportunity   eligibility   application authoring
        human-approved submission package
 ```
 
-The local database is authoritative for the workspace record. External sources
+The fleet database is authoritative for the workspace record. External sources
 remain authoritative for funder rules. Applicant-approved organization facts
 remain authoritative for the applicant. Managed intelligence may assist, but it
 must fail closed and must not rewrite local evidence as fact.
 
 ## Quick start
 
-This safe path creates an isolated local workspace and installs the built-in
-source catalog and knowledge patterns. It does not contact a funder or submit an
-application.
+This path installs the built-in source catalog and knowledge patterns into the
+fleet database. It does not contact a funder or submit an application.
 
 ### Prerequisites
 
 - Git;
 - the Rust toolchain compatible with `Cargo.lock`;
-- a writable temporary directory.
+- Stado installed at `~/.stado/bin/stado`, answering
+  `stado database resolve grant-cli --consumer grant-cli --json`;
+- the Skarbiec bearer of consumer `grant-cli-database-client` in
+  `~/.stado/grant-cli-database-client-skarbiec-token`, which may read
+  `grant-cli-database#pooler_url` and `grant-cli-database#ca_certificate`.
 
 ```bash
 git clone https://github.com/wisent-ai/grant-cli.git
 cd grant-cli
 cargo build --locked
-GRANT_HOME="${TMPDIR:-/tmp}/grant-cli-quickstart" \
-  cargo run --locked -- --json init
+cargo run --locked -- --json init
 ```
 
-Expected JSON contains `home`, `sources`, and `patterns`. The command creates
-local SQLite state under the selected directory. Remove only that disposable
-quick-start directory when it is no longer needed.
+Expected JSON contains `home`, `sources`, and `patterns`. The first command
+creates grant-cli's tables in the fleet database if they are missing.
+
+### Where the data lives and how a failure reads
+
+Every command connects in four steps, and a failure names the step:
+
+1. `stado database resolve grant-cli --consumer grant-cli --json` names the
+   Skarbiec item that holds the address (`grant-cli-database`).
+2. `stado service directory connect skarbiec --consumer grant-cli --json`
+   gives the Skarbiec route.
+3. `stado secrets get grant-cli-database --field pooler_url` and
+   `--field ca_certificate`, as consumer `grant-cli-database-client`, give the
+   pooler URL and the provider's root certificate.
+4. grant-cli connects over TLS verified against that certificate and creates
+   any missing table.
+
+`Stado is not installed at …` means step 1 cannot start. `stado … exited …`
+quotes Stado's own refusal of steps 1 to 3. `… is not a PEM certificate` or
+`… is not a Postgres connection URL` means the Skarbiec item holds a malformed
+field. `connecting to the fleet database grant-cli … failed` carries the
+Postgres or TLS error of step 4. A data error after that reads
+`the fleet database refused: …`.
 
 Inspect the current command surface:
 
@@ -189,9 +213,17 @@ cargo run --locked -- opportunity --help
 cargo run --locked -- application --help
 ```
 
+`grant organization delete <slug>` removes an organization and its evidence;
+the database refuses while an application still names it.
+
 Real source retrieval may make network requests and real documents may contain
-confidential applicant data. Use an approved workspace path before importing
-non-public material.
+confidential applicant data.
+
+### Tests
+
+`cargo test --locked --test db` runs the built grant-cli against the fleet
+database: it creates an organization, reads it back, edits it, deletes it and
+confirms it is gone. It needs the same prerequisites as the quick start.
 
 ## Primary interfaces
 
@@ -200,8 +232,8 @@ non-public material.
   `document`, `guide`, `pattern`, `comment`, `field`, `claim`, `budget`,
   `review`, `outcome`, `analytics`, and `export`.
 - **Machine output:** global `--json` returns structured command results.
-- **Workspace:** `GRANT_HOME` or `--home` selects the local database and retained
-  evidence.
+- **Workspace:** the fleet database `grant-cli` holds the record; `GRANT_HOME`
+  or `--home` selects the directory for fetched source objects and exports.
 - **Platform entitlement:** `grant.local` remains community capability;
   `grant.organization` and `grant.opportunity-intelligence` are managed
   capabilities.
@@ -210,13 +242,14 @@ non-public material.
 
 - **Configuration:** explicit `GRANT_HOME` plus command arguments; managed
   services require separate platform identity and entitlement.
-- **State:** SQLite and exported files under the selected local workspace.
+- **State:** the fleet database `grant-cli`; fetched objects and exported
+  files under the selected local directory.
 - **Credentials:** any private source or managed-service credentials remain
   outside application content and must not be exported into a submission.
 - **Observability:** JSON results, review output, analytics, and retained source
   relationships distinguish missing data from failed external retrieval.
-- **Recovery:** preserve and back up the selected workspace before migration;
-  managed outage must leave local records available.
+- **Recovery:** the fleet database is Supabase Postgres provisioned by
+  `stado database create grant-cli`; its backups follow that project.
 - **Cost:** the local workspace has no hosted entitlement requirement. Managed
   collaboration or intelligence pricing is not published in this repository.
 

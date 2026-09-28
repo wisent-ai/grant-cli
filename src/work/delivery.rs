@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use rusqlite::{OptionalExtension, params};
+use crate::db::sql::{OptionalExtension, params};
 use serde_json::{Value, json};
 
 use crate::db::{Database, now, prefixed_id};
@@ -45,12 +45,12 @@ impl<'a> DeliveryService<'a> {
             created_at: now(),
         };
         self.db.connection.execute(
-            "INSERT INTO outcomes(id, application_id, result, decided_at, awarded_amount, score, feedback_document_id, notes, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ON CONFLICT(application_id) DO UPDATE SET id = excluded.id, result = excluded.result, decided_at = excluded.decided_at, awarded_amount = excluded.awarded_amount, score = excluded.score, feedback_document_id = excluded.feedback_document_id, notes = excluded.notes, created_at = excluded.created_at",
+            "INSERT INTO outcomes(id, application_id, result, decided_at, awarded_amount, score, feedback_document_id, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT(application_id) DO UPDATE SET id = excluded.id, result = excluded.result, decided_at = excluded.decided_at, awarded_amount = excluded.awarded_amount, score = excluded.score, feedback_document_id = excluded.feedback_document_id, notes = excluded.notes, created_at = excluded.created_at",
             params![outcome.id, outcome.application_id, outcome.result, outcome.decided_at, outcome.awarded_amount, outcome.score, feedback_document_id, outcome.notes, outcome.created_at],
         )?;
         if ["awarded", "rejected", "withdrawn"].contains(&result) {
             self.db.connection.execute(
-                "UPDATE applications SET stage = ?1, updated_at = ?2 WHERE id = ?3",
+                "UPDATE applications SET stage = $1, updated_at = $2 WHERE id = $3",
                 params![result, now(), application_id],
             )?;
         }
@@ -68,7 +68,7 @@ impl<'a> DeliveryService<'a> {
             .db
             .connection
             .query_row(
-                "SELECT text_path FROM documents WHERE id = ?1",
+                "SELECT text_path FROM documents WHERE id = $1",
                 [document_id],
                 |row| row.get("text_path"),
             )
@@ -94,7 +94,7 @@ impl<'a> DeliveryService<'a> {
             if comment_words.iter().any(|word| lowered.contains(word)) {
                 let comment_id = prefixed_id("comment");
                 self.db.connection.execute(
-                    "INSERT INTO comments(id, application_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, created_at) VALUES (?1, ?2, 'reviewer-risk', 'warning', ?3, 'evaluator-feedback', ?4, '[]', 'open', ?5)",
+                    "INSERT INTO comments(id, application_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, created_at) VALUES ($1, $2, 'reviewer-risk', 'warning', $3, 'evaluator-feedback', $4, '[]', 'open', $5)",
                     params![comment_id, application_id, paragraph, document_id, now()],
                 )?;
                 comments.push(json!({ "id": comment_id, "body": paragraph }));
@@ -139,7 +139,7 @@ impl<'a> DeliveryService<'a> {
         )?;
         let overdue_tasks = scalar_i64(
             self.db,
-            "SELECT COUNT(*) AS value FROM application_tasks WHERE status != 'done' AND due_at IS NOT NULL AND due_at < datetime('now')",
+            "SELECT COUNT(*) AS value FROM application_tasks WHERE status != 'done' AND due_at IS NOT NULL AND due_at < to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS')",
         )?;
         Ok(Analytics {
             applications,
@@ -158,7 +158,7 @@ impl<'a> DeliveryService<'a> {
             .db
             .connection
             .query_row(
-                "SELECT name, stage FROM applications WHERE id = ?1",
+                "SELECT name, stage FROM applications WHERE id = $1",
                 [application_id],
                 |row| {
                     Ok((
@@ -171,13 +171,13 @@ impl<'a> DeliveryService<'a> {
             .context("application not found")?;
         let (name, stage) = application;
         let outcome: Option<Value> = self.db.connection.query_row(
-            "SELECT result, score, awarded_amount, notes FROM outcomes WHERE application_id = ?1", [application_id],
+            "SELECT result, score, awarded_amount, notes FROM outcomes WHERE application_id = $1", [application_id],
             |row| Ok(json!({ "result": row.get::<_, String>("result")?, "score": row.get::<_, Option<f64>>("score")?, "awarded_amount": row.get::<_, Option<f64>>("awarded_amount")?, "notes": row.get::<_, Option<String>>("notes")? })),
         ).optional()?;
         let comments = self.db.connection.prepare(
-            "SELECT type, severity, body, basis_ref, status, resolution FROM comments WHERE application_id = ?1 ORDER BY created_at",
+            "SELECT type, severity, body, basis_ref, status, resolution FROM comments WHERE application_id = $1 ORDER BY created_at",
         )?.query_map([application_id], |row| Ok(json!({ "type": row.get::<_, String>("type")?, "severity": row.get::<_, String>("severity")?, "body": row.get::<_, String>("body")?, "basis_ref": row.get::<_, Option<String>>("basis_ref")?, "status": row.get::<_, String>("status")?, "resolution": row.get::<_, Option<String>>("resolution")? })))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
         Ok(
             json!({ "application_id": application_id, "name": name, "stage": stage, "outcome": outcome, "comments": comments }),
         )
@@ -185,8 +185,8 @@ impl<'a> DeliveryService<'a> {
 }
 
 fn scalar_i64(db: &Database, sql: &str) -> Result<i64> {
-    Ok(db.connection.query_row(sql, [], |row| row.get("value"))?)
+    Ok(db.connection.query_row(sql, params![], |row| row.get("value"))?)
 }
 fn scalar_f64(db: &Database, sql: &str) -> Result<f64> {
-    Ok(db.connection.query_row(sql, [], |row| row.get("value"))?)
+    Ok(db.connection.query_row(sql, params![], |row| row.get("value"))?)
 }

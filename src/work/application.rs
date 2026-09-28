@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, anyhow};
-use rusqlite::{OptionalExtension, Row, params};
+use crate::db::sql::{OptionalExtension, Row, params};
 use serde_json::{Value, json};
 
 use crate::db::{Database, now, prefixed_id};
@@ -26,7 +26,7 @@ impl<'a> ApplicationService<'a> {
             .db
             .connection
             .query_row(
-                "SELECT id FROM opportunities WHERE id = ?1 OR external_id = ?1 OR url = ?1",
+                "SELECT id FROM opportunities WHERE id = $1 OR external_id = $1 OR url = $1",
                 [opportunity],
                 |row| row.get("id"),
             )
@@ -36,7 +36,7 @@ impl<'a> ApplicationService<'a> {
             .db
             .connection
             .query_row(
-                "SELECT id FROM organizations WHERE id = ?1 OR slug = ?1",
+                "SELECT id FROM organizations WHERE id = $1 OR slug = $1",
                 [organization],
                 |row| row.get("id"),
             )
@@ -57,7 +57,7 @@ impl<'a> ApplicationService<'a> {
             updated_at: timestamp,
         };
         self.db.connection.execute(
-            "INSERT INTO applications(id, opportunity_id, organization_id, name, stage, owner, internal_deadline_at, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
+            "INSERT INTO applications(id, opportunity_id, organization_id, name, stage, owner, internal_deadline_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)",
             params![application.id, application.opportunity_id, application.organization_id, application.name, application.stage, application.owner, application.internal_deadline_at, application.created_at],
         )?;
         self.db
@@ -67,17 +67,17 @@ impl<'a> ApplicationService<'a> {
 
     pub fn get(&self, application_id: &str) -> Result<Application> {
         self.db.connection.query_row(
-            "SELECT id, opportunity_id, organization_id, name, stage, owner, internal_deadline_at, submitted_at, submission_reference, created_at, updated_at FROM applications WHERE id = ?1 OR name = ?1",
+            "SELECT id, opportunity_id, organization_id, name, stage, owner, internal_deadline_at, submitted_at, submission_reference, created_at, updated_at FROM applications WHERE id = $1 OR name = $1",
             [application_id], application_from_row,
         ).optional()?.context("application not found")
     }
 
     pub fn list(&self, stage: Option<&str>) -> Result<Vec<Application>> {
         let mut statement = self.db.connection.prepare(
-            "SELECT id, opportunity_id, organization_id, name, stage, owner, internal_deadline_at, submitted_at, submission_reference, created_at, updated_at FROM applications WHERE (?1 IS NULL OR stage = ?1) ORDER BY COALESCE(internal_deadline_at, 'Z'), updated_at DESC",
+            "SELECT id, opportunity_id, organization_id, name, stage, owner, internal_deadline_at, submitted_at, submission_reference, created_at, updated_at FROM applications WHERE ($1::text IS NULL OR stage = $1) ORDER BY COALESCE(internal_deadline_at, 'Z'), updated_at DESC",
         )?;
         let rows = statement.query_map([stage], application_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
@@ -109,7 +109,7 @@ impl<'a> ApplicationService<'a> {
             application.submitted_at
         };
         self.db.connection.execute(
-            "UPDATE applications SET stage = ?1, submitted_at = ?2, submission_reference = COALESCE(?3, submission_reference), updated_at = ?4 WHERE id = ?5",
+            "UPDATE applications SET stage = $1, submitted_at = $2, submission_reference = COALESCE($3, submission_reference), updated_at = $4 WHERE id = $5",
             params![stage, submitted_at, submission_reference, now(), application.id],
         )?;
         self.db.activity("application", &application.id, "stage-changed", &json!({ "from": application.stage, "to": stage, "submission_reference": submission_reference }))?;
@@ -130,7 +130,7 @@ impl<'a> ApplicationService<'a> {
             self.db
                 .connection
                 .query_row(
-                    "SELECT id FROM application_tasks WHERE id = ?1 AND application_id = ?2",
+                    "SELECT id FROM application_tasks WHERE id = $1 AND application_id = $2",
                     params![dependency, application.id],
                     |row| row.get::<_, String>("id"),
                 )
@@ -150,7 +150,7 @@ impl<'a> ApplicationService<'a> {
             completed_at: None,
         };
         self.db.connection.execute(
-            "INSERT INTO application_tasks(id, application_id, title, description, owner, status, due_at, depends_on_id, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO application_tasks(id, application_id, title, description, owner, status, due_at, depends_on_id, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             params![task.id, task.application_id, task.title, task.description, task.owner, task.status, task.due_at, task.depends_on_id, task.created_at],
         )?;
         self.db
@@ -166,21 +166,21 @@ impl<'a> ApplicationService<'a> {
     ) -> Result<Vec<ApplicationTask>> {
         let application = self.get(application_id)?;
         let mut statement = self.db.connection.prepare(
-            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE application_id = ?1 AND (?2 IS NULL OR status = ?2) AND (?3 = 0 OR (status != 'done' AND due_at IS NOT NULL AND due_at < datetime('now'))) ORDER BY COALESCE(due_at, 'Z'), created_at",
+            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE application_id = $1 AND ($2::text IS NULL OR status = $2) AND (NOT $3::boolean OR (status != 'done' AND due_at IS NOT NULL AND due_at < to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS'))) ORDER BY COALESCE(due_at, 'Z'), created_at",
         )?;
         let rows = statement.query_map(params![application.id, status, overdue], task_from_row)?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
+        rows.collect::<crate::db::sql::Result<Vec<_>>>()
             .map_err(Into::into)
     }
 
     pub fn task_complete(&self, task_id: &str) -> Result<ApplicationTask> {
         let task = self.db.connection.query_row(
-            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE id = ?1",
+            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE id = $1",
             [task_id], task_from_row,
         ).optional()?.context("task not found")?;
         if let Some(dependency) = &task.depends_on_id {
             let dependency_status: String = self.db.connection.query_row(
-                "SELECT status FROM application_tasks WHERE id = ?1",
+                "SELECT status FROM application_tasks WHERE id = $1",
                 [dependency],
                 |row| row.get("status"),
             )?;
@@ -189,7 +189,7 @@ impl<'a> ApplicationService<'a> {
             }
         }
         self.db.connection.execute(
-            "UPDATE application_tasks SET status = 'done', completed_at = ?1 WHERE id = ?2",
+            "UPDATE application_tasks SET status = 'done', completed_at = $1 WHERE id = $2",
             params![now(), task.id],
         )?;
         self.db.activity(
@@ -199,25 +199,25 @@ impl<'a> ApplicationService<'a> {
             &json!({ "task_id": task.id }),
         )?;
         self.db.connection.query_row(
-            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE id = ?1",
+            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE id = $1",
             [task_id], task_from_row,
         ).map_err(Into::into)
     }
 
     pub fn dashboard(&self) -> Result<Value> {
-        let applications: i64 = self.db.connection.query_row("SELECT COUNT(*) AS value FROM applications WHERE stage NOT IN ('archived', 'rejected', 'withdrawn')", [], |row| row.get("value"))?;
-        let overdue_tasks: i64 = self.db.connection.query_row("SELECT COUNT(*) AS value FROM application_tasks WHERE status != 'done' AND due_at IS NOT NULL AND due_at < datetime('now')", [], |row| row.get("value"))?;
+        let applications: i64 = self.db.connection.query_row("SELECT COUNT(*) AS value FROM applications WHERE stage NOT IN ('archived', 'rejected', 'withdrawn')", params![], |row| row.get("value"))?;
+        let overdue_tasks: i64 = self.db.connection.query_row("SELECT COUNT(*) AS value FROM application_tasks WHERE status != 'done' AND due_at IS NOT NULL AND due_at < to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS')", params![], |row| row.get("value"))?;
         let upcoming = self.db.connection.prepare(
             "SELECT id, name, stage, internal_deadline_at FROM applications WHERE internal_deadline_at IS NOT NULL AND stage NOT IN ('archived', 'rejected', 'withdrawn') ORDER BY internal_deadline_at LIMIT 10",
-        )?.query_map([], |row| Ok(json!({ "id": row.get::<_, String>("id")?, "name": row.get::<_, String>("name")?, "stage": row.get::<_, String>("stage")?, "deadline": row.get::<_, String>("internal_deadline_at")? })))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        )?.query_map(params![], |row| Ok(json!({ "id": row.get::<_, String>("id")?, "name": row.get::<_, String>("name")?, "stage": row.get::<_, String>("stage")?, "deadline": row.get::<_, String>("internal_deadline_at")? })))?
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
         Ok(
             json!({ "active_applications": applications, "overdue_tasks": overdue_tasks, "upcoming_deadlines": upcoming }),
         )
     }
 }
 
-fn application_from_row(row: &Row<'_>) -> rusqlite::Result<Application> {
+fn application_from_row(row: &Row<'_>) -> crate::db::sql::Result<Application> {
     Ok(Application {
         id: row.get("id")?,
         opportunity_id: row.get("opportunity_id")?,
@@ -233,7 +233,7 @@ fn application_from_row(row: &Row<'_>) -> rusqlite::Result<Application> {
     })
 }
 
-fn task_from_row(row: &Row<'_>) -> rusqlite::Result<ApplicationTask> {
+fn task_from_row(row: &Row<'_>) -> crate::db::sql::Result<ApplicationTask> {
     Ok(ApplicationTask {
         id: row.get("id")?,
         application_id: row.get("application_id")?,
