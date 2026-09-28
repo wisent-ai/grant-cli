@@ -1,26 +1,24 @@
-//! grant-cli's services talk to the fleet database through this one client.
-//! Every service borrows the `Database` immutably while a command runs, and a
-//! Postgres client writes through `&mut`, so the client sits in a `RefCell`;
-//! a command is one thread and never holds two borrows at once.
+//! grant-cli's services talk to the fleet database through this one client,
+//! a SeaORM connection `stado_database::connect` opens. The services run one
+//! command on one thread and read synchronously, so the connection carries a
+//! current-thread runtime and each statement blocks on it.
 
+mod bind;
 mod row;
 
-use std::cell::RefCell;
 use std::fmt;
 
-use postgres::Client;
-use postgres::types::ToSql;
+use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement as SeaStatement};
+use tokio::runtime::Runtime;
 
+pub use bind::Bind;
 pub use row::Row;
-
-/// One bound parameter of a statement.
-pub type Value<'a> = &'a (dyn ToSql + Sync);
 
 #[derive(Debug)]
 pub enum Error {
     /// A statement that must answer one row answered none.
     NoRows,
-    Postgres(postgres::Error),
+    Database(DbErr),
     /// A stored value does not fit the Rust type the command reads it as.
     Conversion(String),
 }
@@ -29,7 +27,7 @@ impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NoRows => formatter.write_str("the fleet database answered no row"),
-            Self::Postgres(error) => write!(formatter, "the fleet database refused: {error}"),
+            Self::Database(error) => write!(formatter, "the fleet database refused: {error}"),
             Self::Conversion(detail) => formatter.write_str(detail),
         }
     }
@@ -38,15 +36,15 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Postgres(error) => Some(error),
+            Self::Database(error) => Some(error),
             _ => None,
         }
     }
 }
 
-impl From<postgres::Error> for Error {
-    fn from(error: postgres::Error) -> Self {
-        Self::Postgres(error)
+impl From<DbErr> for Error {
+    fn from(error: DbErr) -> Self {
+        Self::Database(error)
     }
 }
 
@@ -74,52 +72,71 @@ impl<T> OptionalExtension<T> for Result<T> {
 }
 
 /// Parameters of mixed types, built by `params!`.
-pub struct Values<'a>(pub Vec<Value<'a>>);
+pub struct Values(pub Vec<sea_orm::Value>);
 
 /// What a statement can be bound with: `params![...]` or an array of one type.
 pub trait Params {
-    fn values(&self) -> Vec<Value<'_>>;
+    fn values(&self) -> Vec<sea_orm::Value>;
 }
 
-impl Params for Values<'_> {
-    fn values(&self) -> Vec<Value<'_>> {
+impl Params for Values {
+    fn values(&self) -> Vec<sea_orm::Value> {
         self.0.clone()
     }
 }
 
-impl<T: ToSql + Sync, const N: usize> Params for [T; N] {
-    fn values(&self) -> Vec<Value<'_>> {
-        self.iter().map(|value| value as Value<'_>).collect()
+impl<T: Bind, const N: usize> Params for [T; N] {
+    fn values(&self) -> Vec<sea_orm::Value> {
+        self.iter().map(Bind::bind).collect()
     }
 }
 
 /// Binds values of mixed types: `params![id, name, now()]`.
 macro_rules! params {
     ($($value:expr),* $(,)?) => {
-        $crate::db::sql::Values(vec![$(&$value as &(dyn ::postgres::types::ToSql + Sync)),*])
+        $crate::db::sql::Values(vec![$($crate::db::sql::Bind::bind(&$value)),*])
     };
 }
 pub(crate) use params;
 
 pub struct Connection {
-    client: RefCell<Client>,
+    runtime: Runtime,
+    database: DatabaseConnection,
 }
 
 impl Connection {
-    pub fn new(client: Client) -> Self {
-        Self {
-            client: RefCell::new(client),
-        }
+    /// The fleet database `grant-cli`, resolved through Stado and Skarbiec.
+    /// A refusal names the step that failed and what Stado answered.
+    pub fn open() -> anyhow::Result<Self> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        let fleet = stado_database::FleetDatabase::for_product("grant-cli", "GRANT_FLEET_HOME")?;
+        let database = runtime.block_on(stado_database::connect(&fleet))?;
+        Ok(Self { runtime, database })
+    }
+
+    fn statement(sql: &str, params: impl Params) -> SeaStatement {
+        SeaStatement::from_sql_and_values(DbBackend::Postgres, sql, params.values())
     }
 
     /// Several statements without parameters, as the schema files hold them.
     pub fn execute_batch(&self, sql: &str) -> Result<()> {
-        self.client.borrow_mut().batch_execute(sql)?;
+        self.runtime.block_on(self.database.execute_unprepared(sql))?;
         Ok(())
     }
 
     pub fn execute(&self, sql: &str, params: impl Params) -> Result<u64> {
-        Ok(self.client.borrow_mut().execute(sql, &params.values())?)
+        let done = self
+            .runtime
+            .block_on(self.database.execute(Self::statement(sql, params)))?;
+        Ok(done.rows_affected())
+    }
+
+    fn query(&self, sql: &str, params: impl Params) -> Result<Vec<sea_orm::QueryResult>> {
+        Ok(self
+            .runtime
+            .block_on(self.database.query_all(Self::statement(sql, params)))?)
     }
 
     /// The first row the statement answers, mapped; `Error::NoRows` if none.
@@ -127,7 +144,7 @@ impl Connection {
     where
         F: FnOnce(&Row<'_>) -> Result<T>,
     {
-        let rows = self.client.borrow_mut().query(sql, &params.values())?;
+        let rows = self.query(sql, params)?;
         let first = rows.first().ok_or(Error::NoRows)?;
         map(&Row::new(first))
     }
@@ -155,11 +172,7 @@ impl Statement<'_> {
     where
         F: FnMut(&Row<'_>) -> Result<T>,
     {
-        let rows = self
-            .connection
-            .client
-            .borrow_mut()
-            .query(self.sql.as_str(), &params.values())?;
+        let rows = self.connection.query(self.sql.as_str(), params)?;
         let mapped: Vec<Result<T>> = rows.iter().map(|row| map(&Row::new(row))).collect();
         Ok(mapped.into_iter())
     }

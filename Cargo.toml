@@ -15,17 +15,17 @@ anyhow = "1.0.104"
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.6.4", features = ["derive", "env"] }
 dirs = "6.0.0"
-native-tls = "0.2.14"
 pdf-extract = "0.12.0"
-postgres = "0.19.10"
-postgres-native-tls = "0.5.1"
 quick-xml = { version = "0.41.0", features = ["serialize"] }
 regex = "1.13.1"
 reqwest = { version = "0.13.4", default-features = false, features = ["blocking", "json", "rustls"] }
 scraper = "0.27.0"
+sea-orm = { version = "1.1", default-features = false, features = ["sqlx-postgres", "runtime-tokio-rustls", "macros"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
+stado-database = { git = "https://github.com/wisent-ai/stado", package = "stado-database" }
+tokio = { version = "1", features = ["rt"] }
 url = "2.5.8"
 uuid = { version = "1.24.0", features = ["v4", "serde"] }
 zip = "8.6.0"

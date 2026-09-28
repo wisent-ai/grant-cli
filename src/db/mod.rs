@@ -1,4 +1,3 @@
-mod fleet;
 pub mod sql;
 
 use std::fs;
@@ -38,7 +37,7 @@ impl Database {
         };
         fs::create_dir_all(root.join("objects"))?;
         fs::create_dir_all(root.join("exports"))?;
-        let connection = Connection::new(fleet::connect()?);
+        let connection = Connection::open()?;
         for family in SCHEMA {
             connection
                 .execute_batch(family)

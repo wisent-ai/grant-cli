@@ -242,8 +242,12 @@ confirms it is gone. It needs the same prerequisites as the quick start.
 
 - **Configuration:** explicit `GRANT_HOME` plus command arguments; managed
   services require separate platform identity and entitlement.
-- **State:** the fleet database `grant-cli`; fetched objects and exported
-  files under the selected local directory.
+- **State:** the fleet database `grant-cli`, reached through the shared
+  `stado-database` crate as a SeaORM connection (the account's home is
+  `GRANT_FLEET_HOME` when set, else `HOME`); fetched objects and exported
+  files under the selected local directory. A refusal names the step that
+  failed: `resolve database`, `resolve Skarbiec route`, `read credential
+  field`, `read pooler_url` or `connect`.
 - **Credentials:** any private source or managed-service credentials remain
   outside application content and must not be exported into a submission.
 - **Observability:** JSON results, review output, analytics, and retained source
