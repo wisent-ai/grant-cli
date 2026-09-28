@@ -37,7 +37,7 @@ impl Database {
         };
         fs::create_dir_all(root.join("objects"))?;
         fs::create_dir_all(root.join("exports"))?;
-        let connection = Connection::open()?;
+        let connection = sql::open()?;
         for family in SCHEMA {
             connection
                 .execute_batch(family)
