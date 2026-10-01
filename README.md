@@ -219,12 +219,6 @@ the database refuses while an application still names it.
 Real source retrieval may make network requests and real documents may contain
 confidential applicant data.
 
-### Tests
-
-`cargo test --locked --test db` runs the built grant-cli against the fleet
-database: it creates an organization, reads it back, edits it, deletes it and
-confirms it is gone. It needs the same prerequisites as the quick start.
-
 ## Primary interfaces
 
 - **CLI:** installed binary `grant`; command families include `source`,

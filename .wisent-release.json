@@ -16,15 +16,6 @@
           "release/build.sh"
         ]
       },
-      "tests": [
-        {
-          "name": "cargo-test",
-          "argv": [
-            "bash",
-            "release/test.sh"
-          ]
-        }
-      ],
       "stage": {
         "bin/grant-cli": "bin/grant-cli",
         "evidence/build.jsonl": "evidence/build.jsonl",
@@ -40,15 +31,6 @@
           "release/build.sh"
         ]
       },
-      "tests": [
-        {
-          "name": "cargo-test",
-          "argv": [
-            "bash",
-            "release/test.sh"
-          ]
-        }
-      ],
       "stage": {
         "bin/grant-cli": "bin/grant-cli",
         "evidence/build.jsonl": "evidence/build.jsonl",

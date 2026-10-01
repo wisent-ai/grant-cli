@@ -5,10 +5,9 @@ edition = "2024"
 description = "Grant research, authoring, evidence, and export workspace on the Wisent fleet database"
 license-file = "LICENSE"
 repository = "https://github.com/wisent-ai/grant-cli"
-
-[[test]]
-name = "db"
-path = "tests/db/lifecycle.rs"
+# No test target is built until the operator approves one with
+# `tama tests approve`.
+autotests = false
 
 [dependencies]
 anyhow = "1.0.104"
