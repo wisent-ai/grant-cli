@@ -168,11 +168,11 @@ fleet database. It does not contact a funder or submit an application.
 
 - Git;
 - the Rust toolchain compatible with `Cargo.lock`;
-- Stado installed at `~/.stado/bin/stado`, answering
-  `stado database resolve grant-cli --consumer grant-cli --json`;
-- the Skarbiec bearer of consumer `grant-cli-database-client` in
-  `~/.stado/grant-cli-database-client-skarbiec-token`, which may read
-  `grant-cli-database#pooler_url` and `grant-cli-database#ca_certificate`.
+- a reachable Postgres fleet database, either through Stado installed at
+  `~/.stado/bin/stado` with `stado database resolve grant-cli --consumer
+  grant-cli --json` and the `grant-cli-database-client` Skarbiec bearer, or
+  through `GRANT_CLI_DATABASE_URL` and `GRANT_CLI_DATABASE_CA_FILE` on a machine
+  without Stado. The CA file must contain the server's trusted PEM certificate.
 
 ```bash
 git clone https://github.com/wisent-ai/grant-cli.git
@@ -186,23 +186,25 @@ creates grant-cli's tables in the fleet database if they are missing.
 
 ### Where the data lives and how a failure reads
 
-Every command connects in four steps, and a failure names the step:
+With Stado, every command connects in four steps, and a failure names the step:
 
 1. `stado database resolve grant-cli --consumer grant-cli --json` names the
    Skarbiec item that holds the address (`grant-cli-database`).
 2. `stado service directory connect skarbiec --consumer grant-cli --json`
    gives the Skarbiec route.
-3. `stado secrets get grant-cli-database --field pooler_url` and
+3. `stado credentials get grant-cli-database --field pooler_url` and
    `--field ca_certificate`, as consumer `grant-cli-database-client`, give the
-   pooler URL and the provider's root certificate.
+   URL and the server's trusted root certificate.
 4. grant-cli connects over TLS verified against that certificate and creates
    any missing table.
 
 `Stado is not installed at …` means step 1 cannot start. `stado … exited …`
-quotes Stado's own refusal of steps 1 to 3. `… is not a PEM certificate` or
-`… is not a Postgres connection URL` means the Skarbiec item holds a malformed
-field. `connecting to the fleet database grant-cli … failed` carries the
-Postgres or TLS error of step 4. A data error after that reads
+quotes Stado's refusal of steps 1 to 3. A missing
+`GRANT_CLI_DATABASE_CA_FILE` with a direct URL is a `read environment`
+refusal before connecting. `… is not a PEM certificate` or
+`… is not a Postgres connection URL` means the credential is malformed.
+`connecting to the fleet database grant-cli … failed` carries the Postgres
+or TLS error of step 4. A data error after that reads
 `the fleet database refused: …`.
 
 Inspect the current command surface:
@@ -243,7 +245,8 @@ confidential applicant data.
   not exist. `grant pattern remove <pattern>` drops a pattern and keeps its
   examples, detached; `grant pattern example-remove <example>` drops one
   example.
-- **Machine output:** global `--json` returns structured command results.
+- **Output:** plain `path: value` lines by default and compact structured
+  results with global `--json`, from the same command result.
 - **Workspace:** the fleet database `grant-cli` holds the record; `GRANT_HOME`
   or `--home` selects the directory for fetched source objects and exports.
 - **Platform entitlement:** `grant.local` remains community capability;
@@ -264,8 +267,9 @@ confidential applicant data.
   outside application content and must not be exported into a submission.
 - **Observability:** JSON results, review output, analytics, and retained source
   relationships distinguish missing data from failed external retrieval.
-- **Recovery:** the fleet database is Supabase Postgres provisioned by
-  `stado database create grant-cli`; its backups follow that project.
+- **Recovery:** the fleet database is Postgres, provisioned by
+  `stado database create grant-cli` or an external Postgres provider. Its
+  backups follow the selected provider.
 - **Cost:** the local workspace has no hosted entitlement requirement. Managed
   collaboration or intelligence pricing is not published in this repository.
 

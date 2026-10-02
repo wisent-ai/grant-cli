@@ -31,7 +31,7 @@ pub use work::*;
     name = "grant",
     version,
     about = "Grant discovery, qualification, authoring and tracking on the Wisent fleet database",
-    after_help = "Results print as readable JSON, or with --json as one compact JSON line. Exit 2: the invocation is wrong; exit 1: the command was refused or failed, with the reason on stderr."
+    after_help = "Results print as path: value text, or with --json as one compact JSON line. Exit 2: the invocation is wrong; exit 1: the command was refused or failed, with the reason on stderr."
 )]
 pub struct Cli {
     /// Directory for fetched source objects and exports.

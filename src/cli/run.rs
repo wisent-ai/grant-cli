@@ -2,6 +2,8 @@
 //! owns the command, and printing what it answered.
 
 use std::fs;
+use std::fmt::Write as FmtWrite;
+use std::io::{self, Write};
 
 use anyhow::{Context, Result};
 use serde::Serialize;
@@ -87,12 +89,44 @@ pub(super) fn value<T: Serialize>(input: T) -> Result<Value> {
     Ok(serde_json::to_value(input)?)
 }
 fn print_value(value: &Value, compact: bool) -> Result<()> {
+    let mut output = io::stdout().lock();
     if compact {
-        println!("{}", serde_json::to_string(value)?);
-    } else if let Value::String(text) = value {
-        println!("{text}");
+        serde_json::to_writer(&mut output, value)?;
+        writeln!(output)?;
     } else {
-        println!("{}", serde_json::to_string_pretty(value)?);
+        write_text(value, &mut String::new(), &mut output)?;
+    }
+    Ok(())
+}
+
+fn write_text<W: Write>(value: &Value, path: &mut String, output: &mut W) -> Result<()> {
+    match value {
+        Value::Object(fields) if !fields.is_empty() => {
+            for (key, field) in fields {
+                let length = path.len();
+                if length != 0 {
+                    path.push('.');
+                }
+                path.push_str(key);
+                write_text(field, path, output)?;
+                path.truncate(length);
+            }
+        }
+        Value::Array(items) if !items.is_empty() => {
+            for (index, item) in items.iter().enumerate() {
+                let length = path.len();
+                write!(path, "[{index}]")?;
+                write_text(item, path, output)?;
+                path.truncate(length);
+            }
+        }
+        _ => {
+            if !path.is_empty() {
+                write!(output, "{path}: ")?;
+            }
+            serde_json::to_writer(&mut *output, value)?;
+            writeln!(output)?;
+        }
     }
     Ok(())
 }
