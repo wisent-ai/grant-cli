@@ -225,6 +225,11 @@ confidential applicant data.
   `opportunity`, `organization`, `eligibility`, `application`, `task`,
   `document`, `guide`, `pattern`, `comment`, `field`, `claim`, `budget`,
   `review`, `outcome`, `analytics`, and `export`.
+  A completed task and a resolved comment can be taken back: `grant task
+  reopen <task>` (refused while a completed task depends on it) and `grant
+  comment reopen <comment>` (clears the resolution); both are refused on a
+  task or comment that is not done or resolved, and both are kept in the
+  application's activity log.
 - **Machine output:** global `--json` returns structured command results.
 - **Workspace:** the fleet database `grant-cli` holds the record; `GRANT_HOME`
   or `--home` selects the directory for fetched source objects and exports.

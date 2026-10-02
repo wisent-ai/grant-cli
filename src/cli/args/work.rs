@@ -59,6 +59,10 @@ pub enum TaskCommand {
     Complete {
         task: String,
     },
+    /// Put a completed task back to open; refused while a completed task depends on it.
+    Reopen {
+        task: String,
+    },
 }
 
 #[derive(Subcommand)]

@@ -1,5 +1,5 @@
 //! The comments recorded against an application: adding one, reading them
-//! in the order their severity demands, and resolving one.
+//! in the order their severity demands, resolving one, and reopening it.
 
 use std::fs;
 
@@ -70,6 +70,26 @@ impl<'a> KnowledgeService<'a> {
             "SELECT id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, resolution, created_at, resolved_at FROM comments WHERE id = $1",
             [comment_id], comment_from_row,
         ).optional()?.context("comment not found")
+    }
+
+    /// The counterpart of `comment_resolve`: a resolved comment goes back to
+    /// open and its resolution is cleared; the activity log keeps both.
+    pub fn comment_reopen(&self, comment_id: &str) -> Result<Comment> {
+        let status: String = self.db.connection.query_row(
+            "SELECT status FROM comments WHERE id = $1", [comment_id], |row| row.get("status"),
+        ).optional()?.context("comment not found")?;
+        if status != "resolved" {
+            anyhow::bail!("comment {comment_id} is {status}, not resolved; only a resolved comment is reopened");
+        }
+        self.db.connection.execute(
+            "UPDATE comments SET status = 'open', resolution = NULL, resolved_at = NULL WHERE id = $1", [comment_id],
+        )?;
+        let comment = self.db.connection.query_row(
+            "SELECT id, application_id, field_id, type, severity, body, basis_kind, basis_ref, suggested_actions_json, status, owner, resolution, created_at, resolved_at FROM comments WHERE id = $1",
+            [comment_id], comment_from_row,
+        )?;
+        self.db.activity("application", &comment.application_id, "comment-reopened", &comment)?;
+        Ok(comment)
     }
 }
 }

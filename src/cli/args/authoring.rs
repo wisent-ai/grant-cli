@@ -35,6 +35,10 @@ pub enum CommentCommand {
         #[arg(long)]
         resolution: String,
     },
+    /// Put a resolved comment back to open and clear its resolution.
+    Reopen {
+        comment: String,
+    },
 }
 
 #[derive(Subcommand)]

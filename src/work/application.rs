@@ -204,6 +204,36 @@ impl<'a> ApplicationService<'a> {
         ).map_err(Into::into)
     }
 
+    /// The counterpart of `task_complete`: a done task goes back to open.
+    /// Refused while a task that depends on it is itself done, because that
+    /// completion was allowed only on the strength of this one; reopen those
+    /// first.
+    pub fn task_reopen(&self, task_id: &str) -> Result<ApplicationTask> {
+        let task = self.db.connection.query_row(
+            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE id = $1",
+            [task_id], task_from_row,
+        ).optional()?.context("task not found")?;
+        if task.status != "done" {
+            return Err(anyhow!("task {} is {}, not done; only a completed task is reopened", task.id, task.status));
+        }
+        let dependents = self.db.connection.prepare(
+            "SELECT id FROM application_tasks WHERE depends_on_id = $1 AND status = 'done' ORDER BY id",
+        )?.query_map([task_id], |row| row.get::<_, String>("id"))?
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
+        if !dependents.is_empty() {
+            return Err(anyhow!("task {} cannot be reopened while completed tasks depend on it: {}; reopen those first", task.id, dependents.join(", ")));
+        }
+        self.db.connection.execute(
+            "UPDATE application_tasks SET status = 'open', completed_at = NULL WHERE id = $1",
+            [task_id],
+        )?;
+        self.db.activity("application", &task.application_id, "task-reopened", &json!({ "task_id": task.id }))?;
+        self.db.connection.query_row(
+            "SELECT id, application_id, title, description, owner, status, due_at, depends_on_id, created_at, completed_at FROM application_tasks WHERE id = $1",
+            [task_id], task_from_row,
+        ).map_err(Into::into)
+    }
+
     pub fn dashboard(&self) -> Result<Value> {
         let applications: i64 = self.db.connection.query_row("SELECT COUNT(*) AS value FROM applications WHERE stage NOT IN ('archived', 'rejected', 'withdrawn')", params![], |row| row.get("value"))?;
         let overdue_tasks: i64 = self.db.connection.query_row("SELECT COUNT(*) AS value FROM application_tasks WHERE status != 'done' AND due_at IS NOT NULL AND due_at < to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS')", params![], |row| row.get("value"))?;

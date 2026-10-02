@@ -71,6 +71,7 @@ pub(super) fn task_command(db: &Database, command: TaskCommand) -> Result<Value>
             overdue,
         } => value(service.task_list(&application, status.as_deref(), overdue)?),
         TaskCommand::Complete { task } => value(service.task_complete(&task)?),
+        TaskCommand::Reopen { task } => value(service.task_reopen(&task)?),
     }
 }
 
@@ -219,6 +220,7 @@ pub(super) fn comment_command(db: &Database, command: CommentCommand) -> Result<
             comment,
             resolution,
         } => value(service.comment_resolve(&comment, &resolution)?),
+        CommentCommand::Reopen { comment } => value(service.comment_reopen(&comment)?),
     }
 }
 
