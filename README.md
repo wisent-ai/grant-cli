@@ -233,7 +233,8 @@ confidential applicant data.
   `grant opportunity unwatch <opportunity>` (refused when it is not
   watched), `grant eligibility rule-remove <rule>` and `grant organization
   evidence-remove <evidence>`; later assessments no longer see what was
-  removed.
+  removed. `grant source disable <source>` stops syncing a source and keeps
+  its snapshots and opportunities; `grant source enable <source>` resumes it.
 - **Machine output:** global `--json` returns structured command results.
 - **Workspace:** the fleet database `grant-cli` holds the record; `GRANT_HOME`
   or `--home` selects the directory for fetched source objects and exports.

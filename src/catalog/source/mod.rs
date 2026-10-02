@@ -124,6 +124,27 @@ impl<'a> SourceService<'a> {
             .map_err(Into::into)
     }
 
+    /// Stop (`false`) or resume (`true`) syncing one source. The counterpart
+    /// of `register` that keeps every snapshot and the opportunities they
+    /// produced, which deleting the source would cascade away; `sync`
+    /// already refuses a disabled source and the all-sources sync skips it.
+    pub fn set_enabled(&self, source: &str, enabled: bool) -> Result<Source> {
+        let current = self.db.connection.query_row(
+            "SELECT id, name, kind, url, authority, enabled, config_json, last_synced_at FROM sources WHERE id = $1 OR name = $1",
+            [source], source_from_row,
+        ).optional()?.with_context(|| format!("source {source} not found; `grant source list` names them"))?;
+        if current.enabled == enabled {
+            let state = if enabled { "enabled" } else { "disabled" };
+            return Err(anyhow!("source {} is already {state}", current.name));
+        }
+        self.db.connection.execute(
+            "UPDATE sources SET enabled = $1 WHERE id = $2", params![enabled, current.id],
+        )?;
+        let event = if enabled { "enabled" } else { "disabled" };
+        self.db.activity("source", &current.id, event, &json!({ "name": current.name }))?;
+        Ok(Source { enabled, ..current })
+    }
+
     pub fn snapshots(&self, source: Option<&str>) -> Result<Vec<Value>> {
         let mut statement = self.db.connection.prepare(
             "SELECT s.id, s.source_id, r.name AS source_name, s.url, s.content_hash, s.media_type, s.object_path, s.metadata_json, s.retrieved_at FROM source_snapshots s JOIN sources r ON r.id = s.source_id WHERE ($1::text IS NULL OR s.source_id = $1 OR r.name = $1) ORDER BY s.retrieved_at DESC",

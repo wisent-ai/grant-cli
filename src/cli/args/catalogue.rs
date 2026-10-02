@@ -20,6 +20,14 @@ pub enum SourceCommand {
         config: Option<String>,
     },
     List,
+    /// Stop syncing a source; its snapshots and opportunities stay.
+    Disable {
+        source: String,
+    },
+    /// Resume syncing a disabled source.
+    Enable {
+        source: String,
+    },
     Snapshots {
         source: Option<String>,
     },

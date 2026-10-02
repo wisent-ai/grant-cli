@@ -31,6 +31,8 @@ pub(super) fn source_command(db: &Database, command: SourceCommand) -> Result<Va
             value(service.register(&name, &kind, &url, &authority, json_arg(config.as_deref())?)?)
         }
         SourceCommand::List => value(service.list()?),
+        SourceCommand::Disable { source } => value(service.set_enabled(&source, false)?),
+        SourceCommand::Enable { source } => value(service.set_enabled(&source, true)?),
         SourceCommand::Snapshots { source } => value(service.snapshots(source.as_deref())?),
         SourceCommand::InstallCatalog => value(service.install_catalog()?),
         SourceCommand::Sync { source } => {
