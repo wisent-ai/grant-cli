@@ -7,3 +7,4 @@ pub mod authoring;
 pub mod delivery;
 pub mod document;
 pub mod knowledge;
+pub mod links;

@@ -77,6 +77,18 @@ pub enum FieldCommand {
         field: String,
         criterion: String,
     },
+    /// Remove a link `link-requirement` made; refused when there is none.
+    UnlinkRequirement {
+        application: String,
+        field: String,
+        requirement: String,
+    },
+    /// Remove a link `link-criterion` made; refused when there is none.
+    UnlinkCriterion {
+        application: String,
+        field: String,
+        criterion: String,
+    },
     Lint {
         application: String,
     },
@@ -105,6 +117,11 @@ pub enum ClaimCommand {
         citation: Option<String>,
         #[arg(long)]
         note: Option<String>,
+    },
+    /// Remove one evidence link by the id `claim link` printed; a claim left
+    /// with no link is unverified again.
+    Unlink {
+        link: String,
     },
 }
 
@@ -147,6 +164,11 @@ pub enum BudgetCommand {
         source_ref: Option<String>,
         #[arg(long)]
         metadata: Option<String>,
+    },
+    /// Remove one budget line by its id.
+    LineRemove {
+        application: String,
+        line: String,
     },
     Check {
         application: String,

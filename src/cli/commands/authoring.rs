@@ -46,6 +46,16 @@ pub(super) fn field_command(db: &Database, command: FieldCommand) -> Result<Valu
             field,
             criterion,
         } => service.field_link_criterion(&application, &field, &criterion),
+        FieldCommand::UnlinkRequirement {
+            application,
+            field,
+            requirement,
+        } => service.field_unlink_requirement(&application, &field, &requirement),
+        FieldCommand::UnlinkCriterion {
+            application,
+            field,
+            criterion,
+        } => service.field_unlink_criterion(&application, &field, &criterion),
         FieldCommand::Lint { application } => value(service.lint(&application)?),
     }
 }
@@ -74,6 +84,7 @@ pub(super) fn claim_command(db: &Database, command: ClaimCommand) -> Result<Valu
             citation.as_deref(),
             note.as_deref(),
         ),
+        ClaimCommand::Unlink { link } => service.claim_unlink(&link),
     }
 }
 
@@ -122,6 +133,9 @@ pub(super) fn budget_command(db: &Database, command: BudgetCommand) -> Result<Va
             source_ref.as_deref(),
             json_arg(metadata.as_deref())?,
         )?),
+        BudgetCommand::LineRemove { application, line } => {
+            value(service.budget_line_remove(&application, &line)?)
+        }
         BudgetCommand::Check { application } => value(service.budget_check(&application)?),
     }
 }

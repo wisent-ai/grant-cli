@@ -235,6 +235,12 @@ confidential applicant data.
   evidence-remove <evidence>`; later assessments no longer see what was
   removed. `grant source disable <source>` stops syncing a source and keeps
   its snapshots and opportunities; `grant source enable <source>` resumes it.
+  Links come apart the same way they were made: `grant field
+  unlink-requirement|unlink-criterion <application> <field> <id>`, `grant
+  claim unlink <link>` (a claim left with no evidence is `unverified`
+  again, also when the evidence itself is removed), and `grant budget
+  line-remove <application> <line>`; each refuses a link or line that does
+  not exist.
 - **Machine output:** global `--json` returns structured command results.
 - **Workspace:** the fleet database `grant-cli` holds the record; `GRANT_HOME`
   or `--home` selects the directory for fetched source objects and exports.

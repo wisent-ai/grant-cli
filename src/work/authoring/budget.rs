@@ -93,6 +93,17 @@ impl<'a> AuthoringService<'a> {
         Ok(line)
     }
 
+    /// The counterpart of `budget_line_add`: one line leaves the
+    /// application's budget; `budget check` no longer counts it.
+    pub fn budget_line_remove(&self, application_id: &str, line_id: &str) -> Result<BudgetLine> {
+        let line = self.db.connection.query_row(
+            "SELECT l.id, l.budget_id, l.task_code, l.category, l.research_type, l.description, l.quantity, l.unit, l.unit_cost, l.eligible_cost, l.aid_rate, l.requested_funding, l.source_ref, l.metadata_json, l.created_at FROM budget_lines l JOIN budgets b ON b.id = l.budget_id WHERE l.id = $1 AND b.application_id = $2",
+            params![line_id, application_id], budget_line_from_row,
+        ).optional()?.with_context(|| format!("budget line {line_id} not found in application {application_id}"))?;
+        self.db.connection.execute("DELETE FROM budget_lines WHERE id = $1", [line_id])?;
+        Ok(line)
+    }
+
     pub fn budget_check(&self, application_id: &str) -> Result<Vec<Finding>> {
         let budget = self.db.connection.query_row(
             "SELECT id, indirect_method, indirect_rate, private_financing_json FROM budgets WHERE application_id = $1", [application_id],

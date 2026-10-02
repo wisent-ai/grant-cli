@@ -117,13 +117,24 @@ impl<'a> OrganizationService<'a> {
     }
 
     /// The counterpart of `evidence_add`: one evidence row leaves the
-    /// organization; later assessments no longer see it.
+    /// organization; later assessments no longer see it. Its claim links go
+    /// with it, and a claim left with no link is `unverified` again.
     pub fn evidence_remove(&self, evidence_id: &str) -> Result<Evidence> {
         let evidence = self.db.connection.query_row(
             "SELECT id, organization_id, kind, title, value_json, source, valid_from, valid_until, confidence, created_at FROM organization_evidence WHERE id = $1",
             [evidence_id], evidence_from_row,
         ).optional()?.with_context(|| format!("evidence {evidence_id} not found; `grant organization evidence-list <organization>` lists the ids"))?;
+        let claims = self.db.connection.prepare(
+            "SELECT DISTINCT claim_id FROM evidence_links WHERE organization_evidence_id = $1",
+        )?.query_map([evidence_id], |row| row.get::<_, String>("claim_id"))?
+            .collect::<crate::db::sql::Result<Vec<_>>>()?;
         self.db.connection.execute("DELETE FROM organization_evidence WHERE id = $1", [evidence_id])?;
+        for claim in &claims {
+            self.db.connection.execute(
+                "UPDATE field_claims SET status = 'unverified' WHERE id = $1 AND status = 'supported' AND NOT EXISTS (SELECT 1 FROM evidence_links WHERE claim_id = $1)",
+                [claim],
+            )?;
+        }
         self.db.activity("organization", &evidence.organization_id, "evidence-removed", &evidence)?;
         Ok(evidence)
     }
