@@ -116,6 +116,18 @@ impl<'a> OrganizationService<'a> {
             .map_err(Into::into)
     }
 
+    /// The counterpart of `evidence_add`: one evidence row leaves the
+    /// organization; later assessments no longer see it.
+    pub fn evidence_remove(&self, evidence_id: &str) -> Result<Evidence> {
+        let evidence = self.db.connection.query_row(
+            "SELECT id, organization_id, kind, title, value_json, source, valid_from, valid_until, confidence, created_at FROM organization_evidence WHERE id = $1",
+            [evidence_id], evidence_from_row,
+        ).optional()?.with_context(|| format!("evidence {evidence_id} not found; `grant organization evidence-list <organization>` lists the ids"))?;
+        self.db.connection.execute("DELETE FROM organization_evidence WHERE id = $1", [evidence_id])?;
+        self.db.activity("organization", &evidence.organization_id, "evidence-removed", &evidence)?;
+        Ok(evidence)
+    }
+
     pub fn rule_add(
         &self,
         opportunity_id: &str,
@@ -142,6 +154,18 @@ impl<'a> OrganizationService<'a> {
             "eligibility-rule-added",
             &rule,
         )?;
+        Ok(rule)
+    }
+
+    /// The counterpart of `rule_add`: one eligibility rule leaves the
+    /// opportunity; later assessments no longer apply it.
+    pub fn rule_remove(&self, rule_id: &str) -> Result<EligibilityRule> {
+        let rule = self.db.connection.query_row(
+            "SELECT id, opportunity_id, name, expression_json, hard_gate, citation FROM eligibility_rules WHERE id = $1",
+            [rule_id], rule_from_row,
+        ).optional()?.with_context(|| format!("eligibility rule {rule_id} not found"))?;
+        self.db.connection.execute("DELETE FROM eligibility_rules WHERE id = $1", [rule_id])?;
+        self.db.activity("opportunity", &rule.opportunity_id, "eligibility-rule-removed", &rule)?;
         Ok(rule)
     }
 

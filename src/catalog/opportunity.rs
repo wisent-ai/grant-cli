@@ -149,6 +149,18 @@ impl<'a> OpportunityService<'a> {
         Ok(json!({ "opportunity_id": resolved, "watched": true, "label": label }))
     }
 
+    /// The counterpart of `watch`: the opportunity leaves the watch list.
+    /// Refused when it is not watched, so a mistyped id is not a silent no-op.
+    pub fn unwatch(&self, opportunity_id: &str) -> Result<Value> {
+        let resolved = self.resolve(opportunity_id)?;
+        let removed = self.db.connection.execute("DELETE FROM watches WHERE opportunity_id = $1", [&resolved])?;
+        if removed == 0 {
+            anyhow::bail!("opportunity {resolved} is not watched");
+        }
+        self.db.activity("opportunity", &resolved, "unwatched", &json!({}))?;
+        Ok(json!({ "opportunity_id": resolved, "watched": false }))
+    }
+
     pub fn changes(&self, opportunity_id: &str) -> Result<Vec<OpportunityChange>> {
         let resolved = self.resolve(opportunity_id)?;
         let mut statement = self.db.connection.prepare(

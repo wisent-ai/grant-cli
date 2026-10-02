@@ -229,7 +229,11 @@ confidential applicant data.
   reopen <task>` (refused while a completed task depends on it) and `grant
   comment reopen <comment>` (clears the resolution); both are refused on a
   task or comment that is not done or resolved, and both are kept in the
-  application's activity log.
+  application's activity log. What is added can be taken out the same way:
+  `grant opportunity unwatch <opportunity>` (refused when it is not
+  watched), `grant eligibility rule-remove <rule>` and `grant organization
+  evidence-remove <evidence>`; later assessments no longer see what was
+  removed.
 - **Machine output:** global `--json` returns structured command results.
 - **Workspace:** the fleet database `grant-cli` holds the record; `GRANT_HOME`
   or `--home` selects the directory for fetched source objects and exports.

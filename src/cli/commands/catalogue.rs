@@ -91,6 +91,7 @@ pub(super) fn opportunity_command(db: &Database, command: OpportunityCommand) ->
         OpportunityCommand::Watch { opportunity, label } => {
             service.watch(&opportunity, label.as_deref())
         }
+        OpportunityCommand::Unwatch { opportunity } => service.unwatch(&opportunity),
         OpportunityCommand::Changes { opportunity } => value(service.changes(&opportunity)?),
     }
 }
@@ -127,6 +128,9 @@ pub(super) fn organization_command(db: &Database, command: OrganizationCommand) 
         OrganizationCommand::EvidenceList { organization } => {
             value(service.evidence_list(&organization)?)
         }
+        OrganizationCommand::EvidenceRemove { evidence } => {
+            value(service.evidence_remove(&evidence)?)
+        }
     }
 }
 
@@ -150,6 +154,7 @@ pub(super) fn eligibility_command(db: &Database, command: EligibilityCommand) ->
             opportunity,
             organization,
         } => value(service.assess(&opportunity, &organization)?),
+        EligibilityCommand::RuleRemove { rule } => value(service.rule_remove(&rule)?),
     }
 }
 

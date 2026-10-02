@@ -39,6 +39,10 @@ pub enum OpportunityCommand {
         #[arg(long)]
         label: Option<String>,
     },
+    /// Take an opportunity off the watch list; refused when it is not watched.
+    Unwatch {
+        opportunity: String,
+    },
     Changes {
         opportunity: String,
     },
@@ -137,6 +141,10 @@ pub enum OrganizationCommand {
     EvidenceList {
         organization: String,
     },
+    /// Remove one evidence row by its id, as `evidence-list` prints it.
+    EvidenceRemove {
+        evidence: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -155,6 +163,10 @@ pub enum EligibilityCommand {
     Assess {
         opportunity: String,
         organization: String,
+    },
+    /// Remove one eligibility rule by its id.
+    RuleRemove {
+        rule: String,
     },
 }
 
