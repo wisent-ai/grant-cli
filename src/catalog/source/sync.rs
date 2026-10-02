@@ -184,4 +184,3 @@ impl<'a> SourceService<'a> {
         Ok(inputs)
     }
 }
-}

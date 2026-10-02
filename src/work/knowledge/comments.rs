@@ -92,4 +92,3 @@ impl<'a> KnowledgeService<'a> {
         Ok(comment)
     }
 }
-}

@@ -152,4 +152,3 @@ impl<'a> AuthoringService<'a> {
         Ok(json!({ "path": path, "package": package }))
     }
 }
-}
