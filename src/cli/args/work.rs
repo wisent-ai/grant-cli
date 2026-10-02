@@ -176,5 +176,13 @@ pub enum PatternCommand {
         #[arg(long)]
         outcome: Option<String>,
     },
+    /// Remove a pattern by id or slug; its examples stay, detached.
+    Remove {
+        pattern: String,
+    },
+    /// Remove one example by the id `example-add` printed.
+    ExampleRemove {
+        example: String,
+    },
 }
 

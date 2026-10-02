@@ -240,7 +240,9 @@ confidential applicant data.
   claim unlink <link>` (a claim left with no evidence is `unverified`
   again, also when the evidence itself is removed), and `grant budget
   line-remove <application> <line>`; each refuses a link or line that does
-  not exist.
+  not exist. `grant pattern remove <pattern>` drops a pattern and keeps its
+  examples, detached; `grant pattern example-remove <example>` drops one
+  example.
 - **Machine output:** global `--json` returns structured command results.
 - **Workspace:** the fleet database `grant-cli` holds the record; `GRANT_HOME`
   or `--home` selects the directory for fetched source objects and exports.

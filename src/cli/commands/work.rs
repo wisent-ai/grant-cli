@@ -185,6 +185,8 @@ pub(super) fn pattern_command(db: &Database, command: PatternCommand) -> Result<
         PatternCommand::ExampleList { pattern, outcome } => {
             value(service.example_list(pattern.as_deref(), outcome.as_deref())?)
         }
+        PatternCommand::Remove { pattern } => value(service.pattern_remove(&pattern)?),
+        PatternCommand::ExampleRemove { example } => service.example_remove(&example),
     }
 }
 

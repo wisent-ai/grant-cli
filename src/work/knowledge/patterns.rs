@@ -67,6 +67,19 @@ impl<'a> KnowledgeService<'a> {
             .map_err(Into::into)
     }
 
+    /// The counterpart of `pattern_add`: the pattern leaves the library.
+    /// Its examples stay, detached (`pattern_id` empty), so the evidence
+    /// they carry is not lost with it. `pattern install` puts a shipped
+    /// pattern back.
+    pub fn pattern_remove(&self, pattern: &str) -> Result<Pattern> {
+        let removed = self.db.connection.query_row(
+            "SELECT id, slug, name, category, authority, status, scope_json, structure_json, rationale, required_inputs_json, anti_patterns_json, source_refs_json, confidence, reviewed_at, created_at FROM patterns WHERE id = $1 OR slug = $1",
+            [pattern], pattern_from_row,
+        ).optional()?.with_context(|| format!("pattern {pattern} not found; `grant pattern list` names them"))?;
+        self.db.connection.execute("DELETE FROM patterns WHERE id = $1", [&removed.id])?;
+        Ok(removed)
+    }
+
     pub fn install_patterns(&self) -> Result<Vec<Pattern>> {
         let definitions = [
             (
@@ -187,6 +200,15 @@ impl<'a> KnowledgeService<'a> {
             params![example_id, pattern_id, application_id, field_code, outcome, text, evaluator_comment, explanation, source_ref, now()],
         )?;
         Ok(json!({ "id": example_id, "pattern_id": pattern_id, "outcome": outcome }))
+    }
+
+    /// The counterpart of `example_add`: one example by the id it printed.
+    pub fn example_remove(&self, example_id: &str) -> Result<Value> {
+        let removed = self.db.connection.execute("DELETE FROM examples WHERE id = $1", [example_id])?;
+        if removed == 0 {
+            anyhow::bail!("example {example_id} not found; `grant pattern example-list` lists the ids");
+        }
+        Ok(json!({ "id": example_id, "removed": true }))
     }
 
     pub fn example_list(&self, pattern: Option<&str>, outcome: Option<&str>) -> Result<Vec<Value>> {
