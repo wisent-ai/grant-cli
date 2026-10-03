@@ -189,12 +189,14 @@ creates grant-cli's tables in the fleet database if they are missing.
 With Stado, every command connects in four steps, and a failure names the step:
 
 1. `stado database resolve grant-cli --consumer grant-cli --json` names the
-   Skarbiec item that holds the address (`grant-cli-database`).
+   credential item that holds the address.
 2. `stado service directory connect skarbiec --consumer grant-cli --json`
    gives the Skarbiec route.
-3. `stado credentials get grant-cli-database --field pooler_url` and
-   `--field ca_certificate`, as consumer `grant-cli-database-client`, give the
-   URL and the server's trusted root certificate.
+3. `stado credentials get <resolved-item> --field pooler_url --route
+   <resolved-url> --consumer grant-cli-database-client --grant-file
+   ~/.stado/grant-cli-database-client-skarbiec-token` and the same read with
+   `--field ca_certificate` give the URL and trusted root under the product's
+   grant, never the credential-store administrator.
 4. grant-cli connects over TLS verified against that certificate and creates
    any missing table.
 
